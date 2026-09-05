@@ -149,23 +149,34 @@ Specs: ${JSON.stringify(product.raw_specs || product.rawSpecs || {})}`;
   }
 
   /**
-   * 2. AGENT SẢN XUẤT NỘI DUNG (AI CONTENT FACTORY)
+   * 2. AGENT SẢN XUẤT NỘI DUNG (AI CONTENT FACTORY) - NÂNG CẤP UGC CHUYÊN SÂU
    */
   async generateContent(product, angle = 'PROBLEM_SOLUTION') {
-    const systemInstruction = `You are the chief copywriter for the Facebook Page "Nhà Có Món Hay" (Positioning: "Những món nhỏ, cuộc sống tiện hơn").
-Tone of Voice:
-- Conversational, warm, observant, authentic, like a trusted friend sharing a genuine household discovery.
-- Absolutely NO hard-sell buzzwords (NO: "SALE SẬP SÀN", "XẢ KHO", "MUA NGAY", "CƠ HỘI DUY NHẤT").
-- DO NOT put any external URLs in the post caption (Facebook will penalize reach).
-- Always end with a subtle, friendly CTA pointing to the First Comment.
-- Output length: 130 - 200 words. Max 3 emojis in entire caption.
+    const systemInstruction = `Bạn là cây bút content creator kỳ cựu và có gu của kênh Facebook "Nhà Có Món Hay" (Định vị: "Những món nhỏ, cuộc sống tiện hơn").
+Mục tiêu: Viết bài chia sẻ chân thực, cực kỳ cuốn hút, giữ chân người đọc từ dòng đầu tiên đến dòng cuối cùng.
 
-Angle Rules:
-- PROBLEM_SOLUTION: Highlight a relatable messy/annoying household friction -> introduce the neat solution.
-- CURIOSITY: Express genuine surprise at how clever and handy the gadget is.
-- WORTH_IT: Balanced review format: 2 big pros and 1 minor caveat, concluding why it's worth every penny.
-- BEFORE_AFTER: Paint a clear contrast between chaos before and satisfying order after.
-- LIFE_HACK: Frame it as a smart space-saving or time-saving habit.
+QUY TẮC VÀNG VỀ GIỌNG ĐIỆU (TONE OF VOICE):
+- Tự nhiên, dí dỏm, chân thực 100% như một người bạn sành sỏi chia sẻ trải nghiệm thật, KHÔNG phải bot hay nhân viên bán hàng thuê.
+- Dùng từ ngữ đời sống tự nhiên của người Việt Nam (nhỏ mà có võ, chim ưng, êm ru, cứu cánh, hời thực sự, đỡ tốn công, đáng đồng tiền bát gạo...).
+- TUYỆT ĐỐI TRÁNH các câu mở đầu rập khuôn kiểu AI: "Góc thú vị cuối tuần...", "Hôm nay mình vừa sắm...", "Hôm nay mình xin giới thiệu...".
+- TUYỆT ĐỐI KHÔNG dùng từ ngữ bán hàng chợ giật gân: "SALE SẬP SÀN", "XẢ KHO", "MUA NGAY", "CƠ HỘI DUY NHẤT".
+- TUYỆT ĐỐI KHÔNG chèn link http/https trong nội dung bài (Facebook sẽ bóp tương tác).
+
+CẤU TRÚC BÀI VIẾT CHUẨN SOCIAL (Thoáng mắt, dễ đọc lướt trên điện thoại):
+1. Dòng Hook (1-2 câu ngắn): Đánh thẳng vào một tình huống đời thường trớ trêu, một sự bực mình quen thuộc, hoặc sự bất ngờ khi phát hiện ra món này. Xuống dòng tạo khoảng trống.
+2. Trải nghiệm thực tế (2-3 đoạn ngắn, mỗi đoạn 2-3 câu):
+   - Kể rõ cảm giác khi dùng thực tế trong gia đình/công việc.
+   - Nêu đúng 2-3 điểm sướng nhất (giải quyết triệt để vấn đề gì, tiết kiệm thời gian/tiền bạc ra sao).
+3. Điểm trừ / Lưu ý chân thành (BẮT BUỘC 1 CHI TIẾT NHỎ):
+   - Ví dụ: "Vỏ hơi bám vân tay xíu", "Nấc gió to nhất hơi có tiếng vù vù nhẹ", "Củ sạc nên dùng loại 5V-2A cho bền pin"...
+   - Chi tiết này là chìa khóa tạo sự tin tưởng 100% nơi người đọc.
+4. Lời kết & CTA tự nhiên, duyên dáng:
+   - Kết luận súc tích về giá trị so với số tiền bỏ ra.
+   - Hướng dẫn người đọc xuống bình luận đầu tiên để lấy link chính hãng săn mã giảm giá.
+5. First Comment:
+   - Nhiệt tình, thân thiện, nhắc bạn đọc nhớ lấy mã giảm giá của shop hoặc voucher Freeship trước khi chốt đơn.
+
+Độ dài: 140 - 220 từ. Dùng tối đa 3-4 icon emoji tự nhiên.
 
 Output JSON schema:
 {
@@ -178,14 +189,14 @@ Output JSON schema:
   "image_prompt": string
 }`;
 
-    const prompt = `Write a high-converting Facebook post for "Nhà Có Món Hay" using angle [${angle}]:
-Product Name: ${product.product_name || product.productName}
-Price: ${product.price.toLocaleString('vi-VN')} đ
-Rating: ${product.rating_star || product.ratingStar} sao (${(product.historical_sold || product.sales).toLocaleString('vi-VN')} đã bán)
-Key Specs & Highlights: ${JSON.stringify(product.raw_specs || product.rawSpecs || {})}
-Shop Type: ${product.shop_type || product.shopType}`;
+    const prompt = `Viết bài chia sẻ cho sản phẩm sau theo góc tiếp cận [${angle}]:
+Tên sản phẩm: ${product.product_name || product.productName}
+Giá bán: ${product.price ? product.price.toLocaleString('vi-VN') : '99.000'} đ
+Đánh giá: ${product.rating_star || product.ratingStar || 4.9} sao (${(product.historical_sold || product.sales || 1000).toLocaleString('vi-VN')} đã bán)
+Thông số & Điểm nổi bật: ${JSON.stringify(product.raw_specs || product.rawSpecs || {})}
+Loại shop: ${product.shop_type || product.shopType || 'Shopee Mall'}`;
 
-    return await this._callGemini(systemInstruction, prompt, 0.4);
+    return await this._callGemini(systemInstruction, prompt, 0.45);
   }
 
   /**
@@ -319,27 +330,32 @@ Raw URL: ${rawUrl}`;
 
   /**
    * 6. AGENT TẠO BỘ ẢNH SẢN PHẨM UGC CHÂN THỰC BẰNG AI (AUTHENTIC SMARTPHONE MULTI-PHOTO)
-   * Tạo 2-3 góc chụp đời thật (iPhone unboxing, cận cảnh chi tiết, đang sử dụng thực tế)
+   * Phân tích chính xác vật thể thực tế sang tiếng Anh và sinh 2-3 góc ảnh đời thực (Flux Model)
    */
   async generateProductImages(product, count = 3) {
     const productName = product.product_name || product.productName || 'Đồ Gia Dụng Tiện Ích';
 
-    const systemPrompt = `You are an authentic Vietnamese Social Media Reviewer taking real-life, unedited smartphone photos of actual household products.
-Generate ${count} distinct English visual prompts for authentic smartphone photography of this product.
+    const systemPrompt = `You are a professional Product Visual Director and Commercial Photographer for E-commerce.
+Analyze the Vietnamese product title and specifications to identify:
+1. Exact physical object in English (clear, unambiguous noun phrase, e.g. "portable rechargeable neck fan", "biodegradable black garbage bag rolls", "wireless lavalier clip-on microphone with furry windshield").
+2. Physical visual attributes (exact materials like matte ABS plastic/brushed aluminum, colors, shapes, distinct features like LED battery display, buttons, clips, ports).
+3. Generate ${count} distinct English visual prompts for the Flux image generation model to produce hyper-realistic, candid smartphone photos shot on an iPhone 15 camera.
 
-CRITICAL REALISM RULES:
-- Style: Candid smartphone photo, shot on iPhone 15 camera, natural ambient indoor lighting in a realistic Vietnamese home or apartment.
-- Raw unedited look, natural reflections, realistic everyday textures, subtle imperfections.
-- ABSOLUTELY NOT a 3D render, NOT CGI, NOT glossy digital illustration, NOT a sterile studio 3D model, NO floating icons, NO text.
-- Must accurately depict the real physical product shape, material, and colors from the Vietnamese title.
+CRITICAL REALISM & ANTI-AI RULES:
+- Style: Candid smartphone photo, shot on iPhone 15, 35mm lens, natural depth of field, real life imperfections, subtle dust or ambient reflections.
+- Natural ambient indoor daylight from a window in a contemporary Vietnamese apartment or home.
+- ABSOLUTELY NOT a 3D render, NOT CGI, NOT a glossy digital illustration, NOT a sterile studio 3D mockup, NO floating graphics, NO text overlays, NO fake glowing rings.
+- The object must look 100% like a real tangible consumer product manufactured for sale.
 
-Góc chụp cần tạo:
-1. photo_overview: Góc chụp mở hộp / đặt trên bàn gỗ phòng khách đời thực, góc nhìn tự nhiên từ trên xuống hoặc chéo.
-2. photo_closeup: Góc chụp cận cảnh chi tiết (nút bấm, màn hình LED, vân chất liệu, đường viền, cổng cắm thật).
-3. photo_in_use: Góc chụp thực tế khi đang cầm trên tay hoặc đang dùng trong phòng sinh hoạt hàng ngày.
+3 Photo Perspectives:
+1. type: "overview" -> Candid flat lay or casual tabletop shot on a natural wooden table, realistic home setting, natural daylight.
+2. type: "closeup" -> Macro close-up on physical details, tactile buttons, plastic/metal texture, seams, LED display, genuine unedited smartphone macro.
+3. type: "in_use" -> Authentic lifestyle action shot of the product being actively used in a real household or everyday setting by real hands.
 
 Output JSON schema:
 {
+  "english_product_name": string,
+  "visual_features": string,
   "photos": [
     { "type": "overview", "prompt": string },
     { "type": "closeup", "prompt": string },
@@ -349,18 +365,20 @@ Output JSON schema:
 
     let photoPrompts = [];
     try {
-      const res = await this._callGemini(systemPrompt, `Product: ${productName}`, 0.4);
+      const res = await this._callGemini(systemPrompt, `Product: ${productName}\nSpecs: ${JSON.stringify(product.raw_specs || product.rawSpecs || {})}`, 0.3);
       if (res && Array.isArray(res.photos) && res.photos.length > 0) {
         photoPrompts = res.photos.slice(0, count);
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[AI_IMAGE_PROMPT_WARN]', err.message);
+    }
 
     if (photoPrompts.length === 0) {
-      const clean = productName.replace(/[^\w\s]/gi, ' ').trim().slice(0, 100);
+      const clean = productName.replace(/[^\w\s]/gi, ' ').trim().slice(0, 80);
       photoPrompts = [
-        { type: 'overview', prompt: `candid smartphone photo of ${clean} on a wooden table, shot on iPhone, natural window daylight, authentic Vietnamese home, NOT 3D render, raw photo` },
-        { type: 'closeup', prompt: `close up macro smartphone photo of ${clean} showing real plastic and metal texture, buttons and details, natural ambient lighting, genuine unedited photo` },
-        { type: 'in_use', prompt: `candid in-use smartphone photo of ${clean} being used in a casual living room, natural daylight, real life perspective, authentic review photo` }
+        { type: 'overview', prompt: `Candid smartphone photo shot on iPhone 15, unedited raw photo of ${clean} on a natural wooden coffee table, soft morning window daylight, realistic Vietnamese apartment, authentic UGC, no CGI, no 3D render` },
+        { type: 'closeup', prompt: `Macro close-up smartphone photo shot on iPhone 15 of ${clean}, detailed view of physical buttons, matte plastic and metal textures, natural ambient lighting, genuine unedited product shot` },
+        { type: 'in_use', prompt: `Candid lifestyle photo shot on iPhone 15, real hands using ${clean} in a cozy living room, authentic everyday moment, natural lighting, realistic household perspective` }
       ].slice(0, count);
     }
 
@@ -374,19 +392,20 @@ Output JSON schema:
     const generatedImages = [];
     for (let i = 0; i < photoPrompts.length; i++) {
       const p = photoPrompts[i];
-      const cleanPrompt = p.prompt.replace(/[^\w\s,.-]/gi, ' ').trim().slice(0, 320);
+      const cleanPrompt = p.prompt.replace(/[^\w\s,.-]/gi, ' ').trim().slice(0, 350);
       const seed = Math.floor(Math.random() * 900000) + 100000;
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=1080&height=1080&nologo=true&seed=${seed}&model=turbo`;
+      // Dùng model=flux để đạt độ phân giải cao và chân thực tối đa
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=1080&height=1080&nologo=true&seed=${seed}&model=flux`;
       
       const localFilePath = path.join(cacheDir, `prod_${seed}.jpg`);
       try {
-        console.log(`[AI_IMAGE] Pre-downloading photo ${i + 1}/${photoPrompts.length} (${p.type})...`);
-        const res = await fetch(url, { signal: AbortSignal.timeout(45000) });
+        console.log(`[AI_IMAGE] Pre-downloading photo ${i + 1}/${photoPrompts.length} (${p.type}) [Flux Model]...`);
+        const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
         if (res.ok) {
           const buf = Buffer.from(await res.arrayBuffer());
           fs.writeFileSync(localFilePath, buf);
         }
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 2000));
       } catch (err) {
         console.warn(`[AI_IMAGE_CACHE_WARN] Error caching image ${i + 1}: ${err.message}`);
       }
