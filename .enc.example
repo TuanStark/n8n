@@ -1,0 +1,92 @@
+# ═══════════════════════════════════════════════════════════════
+# n8n Production Environment Configuration
+# ═══════════════════════════════════════════════════════════════
+
+# Database Configuration
+DB_TYPE=postgresdb
+DB_POSTGRESDB_HOST=n8n-postgres
+DB_POSTGRESDB_PORT=5432
+DB_POSTGRESDB_DATABASE=n8n
+DB_POSTGRESDB_USER=n8n
+DB_POSTGRESDB_PASSWORD=your_secure_postgres_password
+
+# Postgres Container Init Credentials
+POSTGRES_USER=n8n
+POSTGRES_PASSWORD=your_secure_postgres_password
+POSTGRES_DB=n8n
+
+# Host & Routing Setup
+N8N_HOST=n8n.yourdomain.com
+N8N_PORT=5678
+N8N_PROTOCOL=https
+WEBHOOK_URL=https://n8n.yourdomain.com/
+
+# Encryption & Security Settings
+N8N_ENCRYPTION_KEY=generate_with_openssl_rand_hex_32
+N8N_SECURE_COOKIE=true
+N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+NODES_EXCLUDE=[]
+N8N_TRUST_PROXY=true
+
+# Execution Data Auto-Pruning (Keeps database lightweight)
+EXECUTIONS_DATA_PRUNE=true
+EXECUTIONS_DATA_MAX_AGE=168
+EXECUTIONS_DATA_PRUNE_MAX_COUNT=10000
+
+# Timezone Settings
+GENERIC_TIMEZONE=Asia/Ho_Chi_Minh
+TZ=Asia/Ho_Chi_Minh
+
+# ═══════════════════════════════════════════════════════════════
+# Apify — Facebook Group Scraper (thay thế Facebook Graph API)
+# Đăng ký miễn phí tại: apify.com → Settings → Integrations → API tokens
+# ═══════════════════════════════════════════════════════════════
+APIFY_API_TOKEN=your_apify_api_token_here
+FB_GROUP_URL=https://www.facebook.com/groups/1998083910206781/,https://www.facebook.com/groups/9788885511216732/
+FB_GROUP_URLS=https://www.facebook.com/groups/1998083910206781/,https://www.facebook.com/groups/9788885511216732/
+# Facebook Automation Credentials & Session Settings
+# 1. Tùy chọn Auto-Login (để trống khi dùng Persistent Cookie):
+FB_EMAIL=
+FB_PASSWORD=
+# FB_2FA_SECRET=
+# 2. Cookie Facebook (Được nạp vào Persistent Profile /opt/n8n/fb_scraper_data và tự duy trì):
+FB_COOKIE=''
+
+# ═══════════════════════════════════════════════════════════════
+# Slack Bot — S.T.A.R.K Lead Monitor App
+# Lấy tại: api.slack.com/apps → OAuth & Permissions → Bot Token
+# ═══════════════════════════════════════════════════════════════
+SLACK_BOT_TOKEN=
+SLACK_CHANNEL_ID=
+
+# ═══════════════════════════════════════════════════════════════
+# Google Gemini 2.0 Flash — AI Scoring & Comment (Miễn phí 100%)
+# Lấy API key miễn phí tại: https://aistudio.google.com/
+# ═══════════════════════════════════════════════════════════════
+GEMINI_API_KEY=
+
+# ═══════════════════════════════════════════════════════════════
+# S.T.A.R.K Business Profile
+# ═══════════════════════════════════════════════════════════════
+COMPANY_WEBSITE_URL=
+COMPANY_HOTLINE=
+
+
+FB_APP_ID=
+FB_APP_SECRET=
+FB_PAGE_ID=
+# Permanent Page Access Token (Expires: NEVER / Vĩnh viễn)
+FB_PAGE_ACCESS_TOKEN=
+
+
+# 4. TELEGRAM NOTIFICATION BOT (TÙY CHỌN)
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+
+# 5. POSTGRES DATABASE
+DB_POSTGRESDB_HOST=n8n-postgres
+DB_POSTGRESDB_PORT=5432
+DB_POSTGRESDB_USER=n8n
+DB_POSTGRESDB_PASSWORD=
+DB_POSTGRESDB_DATABASE=n8n

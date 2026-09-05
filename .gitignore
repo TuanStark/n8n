@@ -1,0 +1,67 @@
+# ==============================================================================
+# ENVIRONMENT VARIABLES & SECRETS (Tuyệt đối không đẩy secrets lên GitHub)
+# ==============================================================================
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.enc.example
+*.pem
+*.key
+*.cert
+*.crt
+*credential*.json
+*credentials*.json
+postgres_cred.json
+
+# ==============================================================================
+# DOCKER VOLUMES & PERSISTENT DATA (Dữ liệu database và n8n sinh ra khi chạy)
+# ==============================================================================
+postgres_data/
+redis_data/
+n8n_data/
+fb_scraper_data/
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.wal
+
+# ==============================================================================
+# NODE DEPENDENCIES
+# ==============================================================================
+node_modules/
+*/node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==============================================================================
+# GENERATED MEDIA, CACHE & RUNTIME FILES (Ảnh AI, file tạm, cache)
+# ==============================================================================
+generated_images/
+*/generated_images/
+*.jpg
+*.jpeg
+*.png
+*.webp
+!fb-scraper/assets/*
+*.log
+logs/
+*.tmp
+*.temp
+test_*.txt
+uploaded_*.csv
+
+# ==============================================================================
+# OS & IDE METADATA
+# ==============================================================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+.agents/

@@ -1,0 +1,49 @@
+{
+  "name": "Shopee Affiliate — 05 AI Optimizer & Slack Executive Reporter",
+  "id": "shopee-affiliate-05-reporter",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 23 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger-daily-cron",
+      "name": "Daily at 23:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "command": "node /home/node/.n8n/affiliate_engine/orchestrator.js --slack-report"
+      },
+      "id": "node-exec-slack-report",
+      "name": "Send Slack Daily Executive Report",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [380, 300]
+    }
+  ],
+  "connections": {
+    "Daily at 23:00": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Daily Executive Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

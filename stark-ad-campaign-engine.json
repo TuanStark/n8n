@@ -1,0 +1,183 @@
+{
+  "name": "STARK — Paid Ad Strategy & Campaign Engine",
+  "id": "stark-ad-campaign-engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stark-generate-campaign",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-campaign-webhook",
+      "name": "Generate Campaign Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "stark-generate-campaign"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "node-daily-trigger",
+      "name": "Daily Growth Cadence",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id, title, target_audience, target_industry, core_problem, opportunity_score, recommended_offer, estimated_deal_value_vnd\nFROM opportunities\n{{ $json?.body?.opportunity_id ? \"WHERE id = '\" + $json.body.opportunity_id + \"'\" : \"ORDER BY (CASE WHEN status IN ('IDENTIFIED', 'PLANNED') THEN 1 ELSE 2 END), opportunity_score DESC, created_at DESC\" }}\nLIMIT 1;"
+      },
+      "id": "node-fetch-top-opportunity",
+      "name": "Fetch Top Opportunity",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 400],
+      "credentials": {
+        "postgres": {
+          "id": "stark-postgres-cred",
+          "name": "n8n_stark_postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Hợp nhất thông tin đầu vào & đóng gói AI Payload cho bài viết Facebook & Campaign ──\nlet webhookData = {};\ntry {\n  webhookData = $('Generate Campaign Webhook').first()?.json?.body || {};\n} catch (e) {\n  webhookData = {};\n}\n\nlet topOpp = {};\ntry {\n  topOpp = $('Fetch Top Opportunity').first()?.json || {};\n} catch (e) {\n  topOpp = {};\n}\n\nconst opportunityId = webhookData.opportunity_id || topOpp.id || null;\nconst title = webhookData.title || topOpp.title || 'Chuyển đổi số & Thiết kế Website cao cấp';\nconst targetIndustry = webhookData.target_industry || topOpp.target_industry || 'Doanh nghiệp SME & Startups';\nconst coreProblem = webhookData.core_problem || topOpp.core_problem || 'Website cũ lỗi thời, tải chậm và tỷ lệ chuyển đổi đơn hàng thấp';\nconst recommendedOffer = webhookData.recommended_offer || topOpp.recommended_offer || 'Gói thiết kế Website doanh nghiệp chuẩn quốc tế với Next.js & UI/UX độc bản';\n\nconst systemInstruction = `Bạn là Giám đốc Content Marketing & Ad Strategist của S.T.A.R.K — Digital Design & Web Studio (Website chính thức: https://company-plum-rho.vercel.app/).\\nHãy tạo 01 bài viết Facebook bán hàng & marketing hoàn chỉnh (kèm hình ảnh mockup UI/UX độc quyền) và 01 bản đề xuất chiến dịch Paid Ads.\\n\\nYêu cầu bài viết Facebook (full_post_content):\\n- Tiêu đề giật tít thu hút (Hook)\\n- Đánh trúng nỗi đau thực tế của khách hàng (ngành ${targetIndustry})\\n- Đưa ra giải pháp Web Engineering vượt trội của S.T.A.R.K (Next.js siêu tốc, UI/UX độc bản, bảo mật, chuẩn SEO, tích hợp AI)\\n- Kêu gọi hành động (CTA) rõ ràng kèm đường link Portfolio chính thức: https://company-plum-rho.vercel.app/ và Hotline/Zalo tư vấn: 0845.663.357\\n- Thêm icon emoji sinh động, định dạng xuống dòng chuyên nghiệp, đính kèm hashtags.\\n\\nTrả về ONLY valid JSON với cấu trúc:\\n{\\n  \"campaign_name\": \"STARK_FB_POST_...\",\\n  \"platform\": \"FACEBOOK\",\\n  \"objective\": \"LEAD_GENERATION\",\\n  \"facebook_post\": {\\n    \"headline\": \"Tiêu đề bài viết ngắn gọn\",\\n    \"hook\": \"Câu mở đầu gây chú ý\",\\n    \"full_post_content\": \"Toàn bộ nội dung bài viết hoàn chỉnh sẵn sàng đăng lên Facebook...\",\\n    \"call_to_action\": \"Nhận tư vấn & Demo\"\\n  },\\n  \"ad_copies\": {\\n    \"variation_a\": {\\n      \"hook_angle\": \"Trực diện nỗi đau website cũ mất khách\",\\n      \"headline\": \"Website tải chậm đang làm bạn mất khách?\",\\n      \"primary_text\": \"Hơn 70% khách hàng rời bỏ website nếu tốc độ tải trang quá 3 giây...\",\\n      \"call_to_action\": \"Nhận tư vấn & Demo\"\\n    },\\n    \"variation_b\": {\\n      \"hook_angle\": \"Đòn bẩy công nghệ & Trải nghiệm UI/UX chuẩn quốc tế\",\\n      \"headline\": \"Thiết kế Website độc bản chuẩn Silicon Valley\",\\n      \"primary_text\": \"Tối ưu tỷ lệ chuyển đổi, bảo mật tuyệt đối và tốc độ vượt trội...\",\\n      \"call_to_action\": \"Xem Portfolio\"\\n    }\\n  },\\n  \"target_audience_spec\": {\\n    \"locations\": [\"Hà Nội\", \"TP. Hồ Chí Minh\", \"Đà Nẵng\"],\\n    \"age_range\": \"26 - 52\",\\n    \"job_titles\": [\"Founder\", \"CEO\", \"Giám đốc\", \"Marketing Manager\", \"Chủ doanh nghiệp\"],\\n    \"interests\": [\"Thiết kế web\", \"Digital Marketing\", \"Kinh doanh B2B\", \"Chuyển đổi số\"]\\n  },\\n  \"creative_direction\": \"Dark mode UI screen mockup showing Next.js high speed performance\",\\n  \"proposed_daily_budget_vnd\": 500000,\\n  \"max_total_budget_vnd\": 7000000,\\n  \"expected_cpl_vnd\": 180000\\n}`;\n\nconst userContent = `Bối cảnh cơ hội kinh doanh:\\n- Tiêu đề: ${title}\\n- Ngành hàng mục tiêu: ${targetIndustry}\\n- Vấn đề cốt lõi: ${coreProblem}\\n- Gói giải pháp S.T.A.R.K đề xuất: ${recommendedOffer}`;\n\nconst aiRequestBody = {\n  systemInstruction: { parts: [{ text: systemInstruction }] },\n  contents: [{ parts: [{ text: userContent }] }],\n  generationConfig: {\n    responseMimeType: 'application/json',\n    maxOutputTokens: 4096,\n    temperature: 0.3\n  }\n};\n\nreturn [{\n  json: {\n    opportunity_id: opportunityId,\n    title: title,\n    target_industry: targetIndustry,\n    core_problem: coreProblem,\n    recommended_offer: recommendedOffer,\n    ai_request_body: aiRequestBody\n  }\n}];"
+      },
+      "id": "node-merge-campaign-input",
+      "name": "Prepare Campaign Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ ($env.GEMINI_API_KEY || '').replace(/['\"]/g, '') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ai_request_body) }}",
+        "options": { "timeout": 45000 }
+      },
+      "id": "node-ai-campaign-planner",
+      "name": "AI: Ad Strategy & Creative Brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Bóc tách dữ liệu Campaign & Facebook Post ──────────────────────────\nlet inputContext = {};\ntry {\n  inputContext = $('Prepare Campaign Context').first()?.json || {};\n} catch(e) {}\n\nlet rawAi = $input.first()?.json?.candidates?.[0]?.content?.parts?.[0]?.text || '';\nif (!rawAi && $input.first()?.json?.text) {\n  rawAi = $input.first().json.text;\n}\n\nlet plan = null;\nif (rawAi) {\n  let cleaned = String(rawAi).trim();\n  if (cleaned.startsWith('```')) {\n    cleaned = cleaned.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/i, '').trim();\n  }\n  try {\n    plan = JSON.parse(cleaned);\n  } catch (e) {\n    const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      try { plan = JSON.parse(jsonMatch[0]); } catch (err) {}\n    }\n  }\n}\n\nif (!plan) {\n  const oppTitle = inputContext.title || 'Corporate Web Growth';\n  plan = {\n    campaign_name: `STARK_FB_${oppTitle.toUpperCase().replace(/[^A-Z0-9]/g, '_').substring(0, 25)}_Q3`,\n    platform: 'FACEBOOK',\n    objective: 'LEAD_GENERATION',\n    facebook_post: {\n      headline: 'Giải pháp Website Chuẩn Quốc Tế Cho Doanh Nghiệp Tăng Trưởng',\n      hook: 'Website cũ lỗi thời đang làm bạn đánh mất hàng ngàn khách hàng tiềm năng?',\n      full_post_content: `🚀 NÂNG CẤP DIỆN MẠO SỐ — BỨT PHÁ DOANH THU CÙNG S.T.A.R.K\\n\\n${inputContext.core_problem || 'Website tải chậm, trải nghiệm người dùng kém khiến tỷ lệ chuyển đổi đơn hàng sụt giảm nghiêm trọng.'}\\n\\n💡 S.T.A.R.K mang đến giải pháp Web Engineering & Digital Design chuẩn quốc tế:\\n- Thiết kế UI/UX độc bản, tối ưu từng điểm chạm khách hàng\\n- Công nghệ Next.js siêu tốc, tải trang < 1.5s\\n- Chuẩn SEO Google, bảo mật tuyệt đối\\n\\n📁 Xem Portfolio dự án: https://company-plum-rho.vercel.app/\\n📞 Hotline/Zalo tư vấn (24/7): 0845.663.357`,\n      call_to_action: 'Nhận tư vấn ngay'\n    },\n    ad_copies: {\n      variation_a: {\n        hook_angle: 'Trực diện nỗi đau website cũ mất khách',\n        headline: 'Website chuẩn quốc tế cho doanh nghiệp',\n        primary_text: `Giải quyết dứt điểm: ${inputContext.core_problem || 'Website tải chậm'}. Nâng cấp ngay cùng S.T.A.R.K.`,\n        call_to_action: 'Nhận tư vấn ngay'\n      }\n    },\n    target_audience_spec: {\n      locations: ['Hà Nội', 'TP. Hồ Chí Minh', 'Đà Nẵng'],\n      age_range: '28 - 50',\n      job_titles: ['CEO', 'Founder', 'CMO', 'Giám đốc']\n    },\n    creative_direction: 'Dark mode UI screen mockup',\n    proposed_daily_budget_vnd: 500000,\n    max_total_budget_vnd: 7000000,\n    expected_cpl_vnd: 180000\n  };\n}\n\n// Đảm bảo có full_post_content\nlet fbPostContent = plan.facebook_post?.full_post_content || '';\nif (!fbPostContent) {\n  const varA = plan.ad_copies?.variation_a || {};\n  fbPostContent = `🚀 ${varA.headline || plan.facebook_post?.headline || 'GIẢI PHÁP THIẾT KẾ WEBSITE CHUẨN QUỐC TẾ'}\\n\\n${varA.primary_text || plan.facebook_post?.hook || inputContext.core_problem || ''}\\n\\n💡 ${inputContext.recommended_offer || 'Gói thiết kế website cao cấp với Next.js & UI/UX độc bản từ S.T.A.R.K'}\\n\\n📁 Portfolio chính thức: https://company-plum-rho.vercel.app/\\n📞 Hotline/Zalo: 0845.663.357`;\n}\n\nreturn [{\n  json: {\n    opportunity_id: inputContext.opportunity_id || null,\n    campaign_name: plan.campaign_name || 'STARK_GROWTH_POST',\n    platform: plan.platform || 'FACEBOOK',\n    objective: plan.objective || 'LEAD_GENERATION',\n    facebook_post: plan.facebook_post || {},\n    post_content: fbPostContent,\n    ad_copies: plan.ad_copies || {},\n    target_audience_spec: plan.target_audience_spec || {},\n    creative_direction: plan.creative_direction || '',\n    proposed_daily_budget_vnd: Number(plan.proposed_daily_budget_vnd) || 500000,\n    max_total_budget_vnd: Number(plan.max_total_budget_vnd) || 7000000,\n    expected_cpl_vnd: Number(plan.expected_cpl_vnd) || 180000\n  }\n}];"
+      },
+      "id": "node-parse-campaign",
+      "name": "Parse Campaign Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO campaigns (opportunity_id, name, platform, objective, target_audience_spec, ad_copies, proposed_daily_budget_vnd, max_total_budget_vnd, expected_cpl_vnd, status)\nVALUES (\n  {{ $json.opportunity_id ? \"'\" + $json.opportunity_id + \"'\" : \"NULL\" }},\n  '{{ $json.campaign_name.replace(/'/g, \"''\") }}',\n  '{{ $json.platform.replace(/'/g, \"''\") }}',\n  '{{ $json.objective.replace(/'/g, \"''\") }}',\n  '{{ JSON.stringify($json.target_audience_spec).replace(/'/g, \"''\") }}'::jsonb,\n  '{{ JSON.stringify({ ...$json.ad_copies, facebook_post: $json.facebook_post, post_content: $json.post_content }).replace(/'/g, \"''\") }}'::jsonb,\n  {{ $json.proposed_daily_budget_vnd }},\n  {{ $json.max_total_budget_vnd }},\n  {{ $json.expected_cpl_vnd }},\n  'PROPOSED'\n)\nRETURNING id, name, proposed_daily_budget_vnd, expected_cpl_vnd, status;"
+      },
+      "id": "node-save-campaign",
+      "name": "Save to campaigns table",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1320, 400],
+      "credentials": {
+        "postgres": {
+          "id": "stark-postgres-cred",
+          "name": "n8n_stark_postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $('Parse Campaign Plan').item.json.opportunity_id ? \"UPDATE opportunities SET status = 'CAMPAIGN_CREATED' WHERE id = '\" + $('Parse Campaign Plan').item.json.opportunity_id + \"';\" : \"SELECT 1;\" }}"
+      },
+      "id": "node-update-opp-status",
+      "name": "Update Opportunity Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1540, 400],
+      "credentials": {
+        "postgres": {
+          "id": "stark-postgres-cred",
+          "name": "n8n_stark_postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {},
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Facebook Post & Campaign drafted and sent to Slack for approval',\n  campaign_id: $('Save to campaigns table').item.json.id,\n  campaign_name: $('Parse Campaign Plan').item.json.campaign_name,\n  post_content: $('Parse Campaign Plan').item.json.post_content\n}) }}"
+      },
+      "id": "node-respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1760, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  channel: $env.SLACK_CHANNEL_ID,\n  unfurl_links: false,\n  blocks: [\n    {\n      type: 'header',\n      text: { type: 'plain_text', text: `📝 BÀI VIẾT MARKETING MỚI — ${$('Parse Campaign Plan').item.json.campaign_name}` }\n    },\n    {\n      type: 'section',\n      text: { type: 'mrkdwn', text: `*📄 Nội dung bài viết do AI soạn thảo (Xem trước):*\\n\\n\"\"\"\\n${$('Parse Campaign Plan').item.json.post_content}\\n\"\"\"` }\n    },\n    {\n      type: 'divider'\n    },\n    {\n      type: 'section',\n      text: { type: 'mrkdwn', text: '🤖 *TỰ ĐỘNG ĐĂNG BÀI & ĐÍNH KÈM ẢNH:* Bấm nút *\"🚀 Duyệt & Đăng bài lên Facebook\"* để bot tự động mở trình duyệt, đính kèm ảnh Mockup UI/UX và đăng bài viết này vào Facebook Group ngay lập tức.' }\n    },\n    {\n      type: 'actions',\n      elements: [\n        {\n          type: 'button',\n          text: { type: 'plain_text', text: '🚀 Duyệt & Đăng bài lên Facebook' },\n          action_id: 'approve_ad_campaign',\n          value: JSON.stringify({\n            campaign_id: $('Save to campaigns table').item.json.id,\n            name: $('Parse Campaign Plan').item.json.campaign_name,\n            post_content: $('Parse Campaign Plan').item.json.post_content\n          }),\n          style: 'primary'\n        },\n        {\n          type: 'button',\n          text: { type: 'plain_text', text: '❌ Bỏ qua / Hủy' },\n          action_id: 'reject_ad_campaign',\n          value: JSON.stringify({\n            campaign_id: $('Save to campaigns table').item.json.id,\n            name: $('Parse Campaign Plan').item.json.campaign_name\n          }),\n          style: 'danger'\n        }\n      ]\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "node-slack-campaign-proposal",
+      "name": "Send Slack Campaign Proposal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 500]
+    }
+  ],
+  "connections": {
+    "Generate Campaign Webhook": { "main": [[{ "node": "Fetch Top Opportunity", "type": "main", "index": 0 }]] },
+    "Daily Growth Cadence": { "main": [[{ "node": "Fetch Top Opportunity", "type": "main", "index": 0 }]] },
+    "Fetch Top Opportunity": { "main": [[{ "node": "Prepare Campaign Context", "type": "main", "index": 0 }]] },
+    "Prepare Campaign Context": { "main": [[{ "node": "AI: Ad Strategy & Creative Brief", "type": "main", "index": 0 }]] },
+    "AI: Ad Strategy & Creative Brief": { "main": [[{ "node": "Parse Campaign Plan", "type": "main", "index": 0 }]] },
+    "Parse Campaign Plan": { "main": [[{ "node": "Save to campaigns table", "type": "main", "index": 0 }]] },
+    "Save to campaigns table": { "main": [[{ "node": "Update Opportunity Status", "type": "main", "index": 0 }]] },
+    "Update Opportunity Status": {
+      "main": [
+        [
+          { "node": "Respond to Webhook", "type": "main", "index": 0 },
+          { "node": "Send Slack Campaign Proposal", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "STARK" }, { "name": "ADS" }]
+}

@@ -1,0 +1,69 @@
+{
+  "name": "Shopee Affiliate — 02 Content Factory & QA",
+  "id": "shopee-affiliate-02-content-factory",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-manual-or-sub",
+      "name": "When Called By Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "command": "node /home/node/.n8n/affiliate_engine/orchestrator.js --generate"
+      },
+      "id": "node-exec-factory",
+      "name": "Generate Content, QA & ShortLink",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.stdout }}",
+              "operation": "contains",
+              "value2": "Successfully created & queued"
+            }
+          ]
+        }
+      },
+      "id": "check-queued",
+      "name": "Check If Items Queued",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [580, 300]
+    }
+  ],
+  "connections": {
+    "When Called By Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Generate Content, QA & ShortLink",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Content, QA & ShortLink": {
+      "main": [
+        [
+          {
+            "node": "Check If Items Queued",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

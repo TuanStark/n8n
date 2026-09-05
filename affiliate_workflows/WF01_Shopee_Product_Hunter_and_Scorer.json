@@ -1,0 +1,99 @@
+{
+  "name": "Shopee Affiliate — 01 Product Hunter & Scorer",
+  "id": "shopee-affiliate-01-hunter-scorer",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "trigger-cron",
+      "name": "Every 2 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "command": "node /home/node/.n8n/affiliate_engine/orchestrator.js --hunt"
+      },
+      "id": "node-exec-hunter",
+      "name": "Execute Product Hunter & Scorer",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.stdout }}",
+              "operation": "contains",
+              "value2": "approved products"
+            }
+          ]
+        }
+      },
+      "id": "check-success",
+      "name": "Check Qualified Products",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [580, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": "shopee-affiliate-02-content-factory"
+      },
+      "id": "trigger-wf02",
+      "name": "Trigger Content Factory (WF02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [820, 240]
+    }
+  ],
+  "connections": {
+    "Every 2 Hours": {
+      "main": [
+        [
+          {
+            "node": "Execute Product Hunter & Scorer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Product Hunter & Scorer": {
+      "main": [
+        [
+          {
+            "node": "Check Qualified Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Qualified Products": {
+      "main": [
+        [
+          {
+            "node": "Trigger Content Factory (WF02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

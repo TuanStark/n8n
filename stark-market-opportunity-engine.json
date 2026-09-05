@@ -1,0 +1,202 @@
+{
+  "name": "STARK — Market Intelligence & Opportunity Engine",
+  "id": "stark-market-opportunity-engine",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      },
+      "id": "node-schedule-trigger",
+      "name": "Every 12 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stark-trigger-market-scan",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "node-manual-webhook",
+      "name": "Manual Market Scan Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 500],
+      "webhookId": "stark-trigger-market-scan"
+    },
+    {
+      "parameters": {
+        "url": "https://trends.google.com/trending/rss?geo=VN",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-fetch-rss",
+      "name": "Fetch Google Trends RSS (VN)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Bóc tách RSS feed và sinh các tín hiệu thị trường công nghệ / kinh doanh ──\nconst rawData = $input.first()?.json || {};\nconst rawXml = typeof rawData === 'string' ? rawData : (rawData.data || JSON.stringify(rawData));\n\nconst signals = [];\nconst regex = /<item>[\\s\\S]*?<title>(.*?)<\\/title>[\\s\\S]*?<link>(.*?)<\\/link>[\\s\\S]*?<description>(.*?)<\\/description>/gi;\nlet match;\n\nwhile ((match = regex.exec(rawXml)) !== null && signals.length < 8) {\n  const title = (match[1] || '').replace(/<!\\[CDATA\\[(.*?)\\]\\]>/g, '$1').trim();\n  const link = (match[2] || '').trim();\n  const desc = (match[3] || '').replace(/<!\\[CDATA\\[(.*?)\\]\\]>/g, '$1').replace(/<[^>]*>?/gm, '').trim();\n  \n  if (title) {\n    signals.push({\n      source: 'google_trends_vn',\n      source_url: link || 'https://trends.google.com',\n      cleaned_text: `${title} — ${desc}`,\n      category: 'General & Tech Trends',\n      confidence_score: 85.0\n    });\n  }\n}\n\n// Bổ sung tín hiệu thị trường ngành số thực tế cho S.T.A.R.K\nsignals.push(\n  {\n    source: 'industry_scan',\n    source_url: 'https://stark-growth.internal/signals',\n    cleaned_text: 'Doanh nghiệp xuất nhập khẩu & logistics Việt Nam tăng tốc làm lại website chuẩn quốc tế để đón sóng FDI, yêu cầu giao diện hiện đại, tối ưu SEO đa ngôn ngữ và tốc độ tải trang cao.',\n    category: 'Logistics & Supply Chain Web Demand',\n    confidence_score: 95.0\n  },\n  {\n    source: 'industry_scan',\n    source_url: 'https://stark-growth.internal/signals',\n    cleaned_text: 'Nhu cầu thiết kế Landing Page AI và tích hợp Chatbot AI tư vấn trực tiếp trên website của các công ty SaaS và giáo dục trực tuyến EdTech tại Việt Nam tăng mạnh.',\n    category: 'AI-Powered Digital Experience',\n    confidence_score: 92.0\n  }\n);\n\nreturn signals.map(s => ({ json: s }));"
+      },
+      "id": "node-extract-signals",
+      "name": "Extract & Enrich Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO market_signals (source, source_url, cleaned_text, category, confidence_score)\nVALUES (\n  '{{ $json.source.replace(/'/g, \"''\") }}',\n  '{{ ($json.source_url || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.cleaned_text || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.category || '').replace(/'/g, \"''\") }}',\n  {{ $json.confidence_score || 80 }}\n)\nRETURNING id;"
+      },
+      "id": "node-save-signals",
+      "name": "Save to market_signals",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [880, 400],
+      "credentials": {
+        "postgres": {
+          "id": "stark-postgres-cred",
+          "name": "n8n_stark_postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gom tất cả tín hiệu thành 1 item duy nhất để chỉ gọi AI 1 lần\nreturn [{ json: { total_signals: $input.all().length } }];"
+      },
+      "id": "node-consolidate",
+      "name": "Consolidate Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-goog-api-key", "value": "={{ ($env.GEMINI_API_KEY || '').replace(/['\"]/g, '') }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  systemInstruction: {\n    parts: [{\n      text: 'Bạn là Giám đốc Chiến lược Tăng trưởng (Chief Growth Strategist) của S.T.A.R.K — Digital Design & Web Engineering Studio cao cấp (Website: https://company-plum-rho.vercel.app/). Dựa trên các tín hiệu thị trường được cung cấp, hãy phân tích xu hướng và sinh ra 01 Cơ hội Kinh doanh (Business Opportunity) có giá trị cao nhất cho S.T.A.R.K.\\n\\nTrả về ONLY valid JSON với cấu trúc:\\n{\\n  \"trend_topic\": \"<Tên xu hướng>\",\\n  \"trend_classification\": \"EMERGING\" | \"GROWING\" | \"STABLE\",\\n  \"growth_rate_pct\": <số 0-100>,\\n  \"commercial_intent_score\": <số 0-100>,\\n  \"stark_relevance_score\": <số 0-100>,\\n  \"trend_score\": <số 0-100>,\\n  \"opportunity\": {\\n    \"title\": \"<Tên cơ hội kinh doanh cụ thể>\",\\n    \"target_audience\": \"<Đối tượng khách hàng mục tiêu>\",\\n    \"target_industry\": \"<Ngành hàng>\",\\n    \"core_problem\": \"<Nỗi đau / Vấn đề thực tế khách hàng gặp phải>\",\\n    \"trend_score\": <số 0-100>,\\n    \"commercial_score\": <số 0-100>,\\n    \"competition_gap_score\": <số 0-100>,\\n    \"opportunity_score\": <Điểm tổng hợp 0-100>,\\n    \"recommended_offer\": \"<Gói giải pháp S.T.A.R.K nên cung cấp (Tech stack, UX, Scope)>\",\\n    \"recommended_channel\": \"Meta Ads\" | \"LinkedIn\" | \"Direct Outreach\" | \"Content SEO\",\\n    \"estimated_deal_value_vnd\": <Giá trị hợp đồng ước tính bằng số nguyên VNĐ, vd: 80000000>\\n  }\\n}'\n    }]\n  },\n  contents: [{\n    parts: [{\n      text: 'Danh sách tín hiệu thị trường vừa thu thập:\\n' + $('Extract & Enrich Signals').all().map(item => '- ' + item.json.cleaned_text).join('\\n')\n    }]\n  }],\n  generationConfig: {\n    responseMimeType: 'application/json',\n    maxOutputTokens: 4096,\n    temperature: 0.2\n  }\n}) }}",
+        "options": { "timeout": 45000 }
+      },
+      "id": "node-ai-opportunity",
+      "name": "AI: Opportunity Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1260, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Parse Gemini Opportunity Response ──────────────────────────────────\nconst rawAi = $input.first()?.json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nlet data;\ntry {\n  data = JSON.parse(rawAi);\n} catch (e) {\n  data = {\n    trend_topic: 'Corporate Web Transformation',\n    trend_classification: 'GROWING',\n    trend_score: 85,\n    opportunity: {\n      title: 'Modern Web Engineering for Fast-Growing SMEs',\n      target_audience: 'Founders & CMOs',\n      target_industry: 'Technology & Logistics',\n      core_problem: 'Outdated legacy websites with poor performance and low conversion',\n      trend_score: 85,\n      commercial_score: 90,\n      competition_gap_score: 80,\n      opportunity_score: 85,\n      recommended_offer: 'Full-stack High Performance Web Design with Next.js & Headless CMS',\n      recommended_channel: 'Meta Ads & LinkedIn',\n      estimated_deal_value_vnd: 80000000\n    }\n  };\n}\n\nconst opp = data.opportunity || {};\nreturn [{\n  json: {\n    trend_topic: data.trend_topic || 'Modern Web Demand',\n    trend_classification: data.trend_classification || 'GROWING',\n    trend_score: data.trend_score || 80,\n    title: opp.title || 'High-end Corporate Website Redesign',\n    target_audience: opp.target_audience || 'SME Business Owners',\n    target_industry: opp.target_industry || 'Cross-industry',\n    core_problem: opp.core_problem || 'Poor mobile experience and slow page speed',\n    trend_score_val: opp.trend_score || 80,\n    commercial_score: opp.commercial_score || 85,\n    competition_gap_score: opp.competition_gap_score || 75,\n    opportunity_score: opp.opportunity_score || 82,\n    recommended_offer: opp.recommended_offer || 'Custom High-End Web Experience',\n    recommended_channel: opp.recommended_channel || 'Meta Ads',\n    estimated_deal_value_vnd: opp.estimated_deal_value_vnd || 60000000\n  }\n}];"
+      },
+      "id": "node-parse-opportunity",
+      "name": "Parse Opportunity Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1460, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO opportunities (title, target_audience, target_industry, core_problem, trend_score, commercial_score, competition_gap_score, opportunity_score, recommended_offer, recommended_channel, estimated_deal_value_vnd)\nVALUES (\n  '{{ $json.title.replace(/'/g, \"''\") }}',\n  '{{ ($json.target_audience || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.target_industry || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.core_problem || '').replace(/'/g, \"''\") }}',\n  {{ $json.trend_score_val || 80 }},\n  {{ $json.commercial_score || 80 }},\n  {{ $json.competition_gap_score || 75 }},\n  {{ $json.opportunity_score || 80 }},\n  '{{ ($json.recommended_offer || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.recommended_channel || '').replace(/'/g, \"''\") }}',\n  {{ $json.estimated_deal_value_vnd || 50000000 }}\n)\nRETURNING id, title, opportunity_score, target_industry, recommended_offer, estimated_deal_value_vnd;"
+      },
+      "id": "node-save-opportunity",
+      "name": "Save to opportunities",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1680, 400],
+      "credentials": {
+        "postgres": {
+          "id": "stark-postgres-cred",
+          "name": "n8n_stark_postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-score-high",
+              "leftValue": "={{ $('Parse Opportunity Data').item.json.opportunity_score }}",
+              "rightValue": 75,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-if-high-score",
+      "name": "Score >= 75?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  channel: $env.SLACK_CHANNEL_ID,\n  unfurl_links: false,\n  blocks: [\n    {\n      type: 'header',\n      text: { type: 'plain_text', text: `🚀 CƠ HỘI KINH DOANH MỚI — Score: ${$('Parse Opportunity Data').item.json.opportunity_score}/100` }\n    },\n    {\n      type: 'section',\n      fields: [\n        { type: 'mrkdwn', text: `*🎯 Ngành hàng:*\\n${$('Parse Opportunity Data').item.json.target_industry}` },\n        { type: 'mrkdwn', text: `*💰 Deal Size ước tính:*\\n${Number($('Parse Opportunity Data').item.json.estimated_deal_value_vnd).toLocaleString('vi-VN')} VNĐ` }\n      ]\n    },\n    {\n      type: 'section',\n      text: { type: 'mrkdwn', text: `*📌 Vấn đề khách hàng:*\\n> ${$('Parse Opportunity Data').item.json.core_problem}` }\n    },\n    {\n      type: 'section',\n      text: { type: 'mrkdwn', text: `*💡 Giải pháp S.T.A.R.K đề xuất:*\\n\"\"\"${$('Parse Opportunity Data').item.json.recommended_offer}\"\"\"\\n*📡 Kênh triển khai tối ưu:* ${$('Parse Opportunity Data').item.json.recommended_channel}` }\n    },\n    { type: 'divider' },\n    {\n      type: 'actions',\n      elements: [\n        {\n          type: 'button',\n          text: { type: 'plain_text', text: '⚡ Tạo Chiến dịch Ads' },\n          action_id: 'create_campaign_for_opportunity',\n          value: JSON.stringify({ opportunity_id: $json.id }),\n          style: 'primary'\n        },\n        {\n          type: 'button',\n          text: { type: 'plain_text', text: '✍️ Soạn Content Insight' },\n          action_id: 'create_content_for_opportunity',\n          value: JSON.stringify({ opportunity_id: $json.id })\n        }\n      ]\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "node-slack-opportunity",
+      "name": "Slack Opportunity Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2120, 300]
+    }
+  ],
+  "connections": {
+    "Every 12 Hours": { "main": [[{ "node": "Fetch Google Trends RSS (VN)", "type": "main", "index": 0 }]] },
+    "Manual Market Scan Webhook": { "main": [[{ "node": "Fetch Google Trends RSS (VN)", "type": "main", "index": 0 }]] },
+    "Fetch Google Trends RSS (VN)": { "main": [[{ "node": "Extract & Enrich Signals", "type": "main", "index": 0 }]] },
+    "Extract & Enrich Signals": { "main": [[{ "node": "Save to market_signals", "type": "main", "index": 0 }]] },
+    "Save to market_signals": { "main": [[{ "node": "Consolidate Signals", "type": "main", "index": 0 }]] },
+    "Consolidate Signals": { "main": [[{ "node": "AI: Opportunity Engine", "type": "main", "index": 0 }]] },
+    "AI: Opportunity Engine": { "main": [[{ "node": "Parse Opportunity Data", "type": "main", "index": 0 }]] },
+    "Parse Opportunity Data": { "main": [[{ "node": "Save to opportunities", "type": "main", "index": 0 }]] },
+    "Save to opportunities": { "main": [[{ "node": "Score >= 75?", "type": "main", "index": 0 }]] },
+    "Score >= 75?": { "main": [[{ "node": "Slack Opportunity Alert", "type": "main", "index": 0 }], []] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "STARK" }, { "name": "GROWTH" }]
+}

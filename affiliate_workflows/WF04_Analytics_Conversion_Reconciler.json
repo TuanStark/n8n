@@ -1,0 +1,49 @@
+{
+  "name": "Shopee Affiliate — 04 Analytics & Conversion Reconciler",
+  "id": "shopee-affiliate-04-reconciler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "trigger-cron-reconcile",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "command": "node /home/node/.n8n/affiliate_engine/orchestrator.js --reconcile"
+      },
+      "id": "node-exec-reconcile",
+      "name": "Reconcile Shopee Orders & SubIDs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [340, 300]
+    }
+  ],
+  "connections": {
+    "Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Reconcile Shopee Orders & SubIDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

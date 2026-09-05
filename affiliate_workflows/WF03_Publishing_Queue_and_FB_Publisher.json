@@ -1,0 +1,78 @@
+{
+  "name": "Shopee Affiliate — 03 Publishing Queue & FB Publisher",
+  "id": "shopee-affiliate-03-fb-publisher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "trigger-cron-publish",
+      "name": "Check Queue Every 5 Min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "command": "node /home/node/.n8n/affiliate_engine/orchestrator.js --publish"
+      },
+      "id": "node-exec-publish",
+      "name": "Publish Due Items to FB Page",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.stdout }}",
+              "operation": "contains",
+              "value2": "Feed post published successfully"
+            }
+          ]
+        }
+      },
+      "id": "check-published",
+      "name": "Check If Published",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [580, 300]
+    }
+  ],
+  "connections": {
+    "Check Queue Every 5 Min": {
+      "main": [
+        [
+          {
+            "node": "Publish Due Items to FB Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Due Items to FB Page": {
+      "main": [
+        [
+          {
+            "node": "Check If Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

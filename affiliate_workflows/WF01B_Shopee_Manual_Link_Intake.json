@@ -1,0 +1,154 @@
+{
+  "name": "Shopee Affiliate — 01B Manual Link Intake & Scorer",
+  "id": "shopee-affiliate-01b-manual-intake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shopee-daily-intake",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "trigger-webhook",
+      "name": "Webhook Intake (API / Automation)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 200],
+      "webhookId": "shopee-daily-intake"
+    },
+    {
+      "parameters": {
+        "path": "shopee-links",
+        "formTitle": "Nhà Có Món Hay — Nạp 20 Link Shopee Hàng Ngày",
+        "formDescription": "Dán tối đa 20 link Shopee mỗi ngày (1 link/dòng). Bạn có thể dán link Shopee gốc, link rút gọn s.shopee.vn, hoặc định dạng [Link Gốc | Link Affiliate]. Hệ thống sẽ tự động giải mã sản phẩm, AI chấm điểm và tạo bài đăng kèm link tiếp thị của bạn.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "👉 BẤM VÀO Ô TRẮNG NÀY ĐỂ DÁN (Nội dung file CSV Shopee hoặc Danh sách link):",
+              "fieldType": "textarea",
+              "placeholder": "Mở file CSV của bạn -> Nhấn Ctrl+A -> Ctrl+C -> Rồi bấm vào đây nhấn Ctrl+V để dán toàn bộ dữ liệu vào...",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "buttonLabel": "Gửi Danh Sách Sản Phẩm"
+        }
+      },
+      "id": "trigger-form",
+      "name": "Web Form Intake (Giao diện Web)",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [100, 420],
+      "webhookId": "shopee-links"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Chuẩn hóa dữ liệu đầu vào từ Form hoặc Webhook\nconst inputData = $input.first().json;\nlet rawText = '';\n\nif (inputData.body && inputData.body.links) {\n  rawText = typeof inputData.body.links === 'string' ? inputData.body.links : JSON.stringify(inputData.body.links);\n} else if (inputData.links) {\n  rawText = typeof inputData.links === 'string' ? inputData.links : JSON.stringify(inputData.links);\n} else {\n  const values = Object.values(inputData);\n  const textVal = values.find(v => typeof v === 'string' && v.trim().length > 0);\n  rawText = textVal || JSON.stringify(inputData);\n}\n\nreturn [{ json: { rawText } }];"
+      },
+      "id": "normalize-input",
+      "name": "Normalize Input Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 310]
+    },
+    {
+      "parameters": {
+        "command": "=echo '{{ $json.rawText.replace(/'/g, \"'\\\\''\") }}' > /home/node/.n8n/scratch_intake.txt && node /home/node/.n8n/affiliate_engine/orchestrator.js --import-file /home/node/.n8n/scratch_intake.txt"
+      },
+      "id": "node-exec-intake",
+      "name": "Run Manual Intake & AI Scorer",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [580, 310]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.stdout }}",
+              "operation": "contains",
+              "value2": "\"qualified_count\":"
+            }
+          ]
+        }
+      },
+      "id": "check-intake-success",
+      "name": "Check Qualified Products",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [820, 310]
+    },
+    {
+      "parameters": {
+        "workflowId": "shopee-affiliate-02-content-factory"
+      },
+      "id": "trigger-wf02",
+      "name": "Trigger Content Factory (WF02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1060, 240]
+    }
+  ],
+  "connections": {
+    "Webhook Intake (API / Automation)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Form Intake (Giao diện Web)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input Text": {
+      "main": [
+        [
+          {
+            "node": "Run Manual Intake & AI Scorer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Manual Intake & AI Scorer": {
+      "main": [
+        [
+          {
+            "node": "Check Qualified Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Qualified Products": {
+      "main": [
+        [
+          {
+            "node": "Trigger Content Factory (WF02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

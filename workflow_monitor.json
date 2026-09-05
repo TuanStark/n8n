@@ -1,0 +1,192 @@
+{
+  "name": "STARK — Facebook Lead Monitor v2",
+  "id": "stark-lead-monitor-v2",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "node-trigger",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [80, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fb-scraper:3000/scrape",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "node-scraper",
+      "name": "Local Scraper: Scrape Group Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [300, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Bóc tách bài viết & lọc bài viết trong 24h ──────────────────────────\nconst allInputs = $input.all();\nlet rawPosts = [];\n\nfor (const item of allInputs) {\n  const data = item.json || {};\n  if (Array.isArray(data)) {\n    rawPosts.push(...data);\n  } else if (Array.isArray(data.posts)) {\n    rawPosts.push(...data.posts);\n  } else if (data.message || data.text || data.postId || data.id) {\n    rawPosts.push(data);\n  }\n}\n\nconst now = new Date();\nconst cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);\n\nconst results = [];\nconst seenIds = new Set();\n\nfor (const post of rawPosts) {\n  const msg = String(post.message || post.text || '').trim();\n  if (!msg || msg.length < 10) continue;\n\n  const pId = String(post.postId || post.post_id || post.id || `fb_${Date.now()}_${Math.random()}`);\n  if (seenIds.has(pId)) continue;\n  seenIds.add(pId);\n\n  const postTime = post.created_time || post.createdAt || post.time;\n  const parsedTime = postTime ? new Date(postTime) : null;\n  if (parsedTime && !isNaN(parsedTime.getTime()) && parsedTime < cutoff) continue;\n\n  results.push({\n    post_id:      pId,\n    author:       String(post.author || post.authorName || post.username || 'Người dùng Facebook'),\n    message:      msg,\n    permalink:    String(post.permalink || post.url || 'https://www.facebook.com'),\n    created_time: postTime || now.toISOString()\n  });\n}\n\n// Khi test trong n8n Editor hoặc khi Scraper chưa có bài mới -> Tự động nạp Lead mẫu để test\nif (results.length === 0 && ($execution?.mode === 'test' || $execution?.mode === 'manual' || $input.first()?.json?.__testTrigger)) {\n  results.push({\n    post_id:      `test_lead_${Date.now()}`,\n    author:       'Khách Hàng Test (Demo Lead)',\n    message:      'Mình cần tìm team thiết kế website bán hàng thương mại điện tử chuyên nghiệp chuẩn SEO, tích hợp chatbot AI tư vấn và cổng thanh toán tự động. Ngân sách tầm 15 - 25 triệu, ai làm được inbox mình nhé.',\n    permalink:    'https://www.facebook.com/groups/1998083910206781/posts/demo_lead',\n    created_time: now.toISOString()\n  });\n}\n\nreturn results.map(p => ({ json: p }));"
+      },
+      "id": "node-dedup",
+      "name": "Dedup + Filter Recent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-kw",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "làm web|thiết kế web|code web|thuê web|cần web|landing page|website|ecommerce|thương mại điện tử|lập trình|app mobile|phần mềm|wordpress|shopify|chạy ads|chạy quảng cáo|facebook ads|google ads|tiktok ads|performance marketing|marketing|tối ưu ads",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-keyword",
+      "name": "Keyword Match?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Chuẩn bị dữ liệu Lead và mẫu comment chào hàng chuyên nghiệp ────────────────\nconst matchedPosts = $input.all();\nconst professionalComment = 'Chào bạn, bên mình chuyên thiết kế & phát triển Website/Web App theo yêu cầu (UI/UX độc quyền, chuẩn SEO Google, tốc độ tải cực nhanh, bàn giao 100% mã nguồn & bảo hành kỹ thuật 12 tháng).\\n\\n📁 Portfolio dự án: company-plum-rho . vercel . app (bỏ dấu cách)\\n📞 Hotline/Zalo tư vấn: 0845.663.357\\n\\nBạn check inbox hoặc kết bạn Zalo để bên mình gửi bản demo giao diện và bảng báo giá chi tiết nhé!';\n\nconst results = [];\nfor (let i = 0; i < matchedPosts.length; i++) {\n  const post = matchedPosts[i]?.json || {};\n\n  results.push({\n    json: {\n      post_id:       post.post_id || `lead_${Date.now()}_${i}`,\n      author:        post.author || 'Người dùng Facebook',\n      message:       post.message || '',\n      permalink:     post.permalink || 'https://www.facebook.com',\n      created_time:  post.created_time || new Date().toISOString(),\n      ai_comment:    professionalComment,\n      lead_score:    10,\n      score_reason:  'Bài viết khớp từ khóa tìm kiếm dịch vụ website / digital',\n      score_badge:   '🔥'\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "node-fixed-comment",
+      "name": "Prepare Lead & Fixed Comment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO stark_leads (post_id, author, message, permalink, ai_comment, lead_score, score_reason)\nVALUES (\n  '{{ ($json.post_id || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.author || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.message || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.permalink || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.ai_comment || '').replace(/'/g, \"''\") }}',\n  {{ $json.lead_score || 10 }},\n  '{{ ($json.score_reason || '').replace(/'/g, \"''\") }}'\n)\nON CONFLICT (post_id) DO NOTHING\nRETURNING id, post_id, author, message, permalink, ai_comment, lead_score, score_reason;"
+      },
+      "id": "node-postgres",
+      "name": "Save to stark_leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1180, 200],
+      "credentials": {
+        "postgres": {
+          "id": "stark-postgres-cred",
+          "name": "n8n_stark_postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Chỉ giữ lại các Lead THỰC SỰ MỚI (được INSERT thành công vào DB) ────────\nconst items = $input.all();\nconst newLeads = [];\n\nfor (const item of items) {\n  const data = item.json || {};\n  // Khi ON CONFLICT DO NOTHING xảy ra, Postgres trả về { success: true } và KHÔNG có data.id / data.post_id\n  if (data.id && data.post_id && data.permalink) {\n    newLeads.push(item);\n  }\n}\n\nreturn newLeads;"
+      },
+      "id": "node-filter-new-leads",
+      "name": "Filter New Leads Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1350, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fb-scraper:3000/comment",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  postUrl: $json.permalink,\n  commentText: $json.ai_comment\n}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "node-auto-comment",
+      "name": "Auto Post Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1520, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Merge kết quả comment với dữ liệu Lead ──────────────────────────────\nconst commentOutputs = $input.all();\nconst preparedLeads = $('Filter New Leads Only').all();\n\nreturn commentOutputs.map((item, idx) => {\n  const lead = preparedLeads[idx]?.json || {};\n  const commentRes = item.json || {};\n  let errorMsg = '';\n  if (commentRes.error) {\n    errorMsg = typeof commentRes.error === 'object' ? (commentRes.error.message || JSON.stringify(commentRes.error)) : String(commentRes.error);\n  } else if (commentRes.message && !commentRes.success) {\n    errorMsg = String(commentRes.message);\n  }\n  \n  let botStatus = '✅ Đã tự động post comment';\n  if (commentRes.alreadyCommented) {\n    botStatus = 'ℹ️ Bài viết đã có bình luận từ trước (Bỏ qua)';\n  } else if (!commentRes.success) {\n    botStatus = '⚠️ ' + (errorMsg || 'Chưa tự động comment được');\n  }\n\n  return {\n    json: {\n      ...lead,\n      comment_success: Boolean(commentRes.success),\n      already_commented: Boolean(commentRes.alreadyCommented),\n      bot_status_text: botStatus\n    }\n  };\n});"
+      },
+      "id": "node-merge-lead-comment",
+      "name": "Merge Lead & Comment Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  channel: $env.SLACK_CHANNEL_ID,\n  unfurl_links: false,\n  blocks: [\n    {\n      type: 'header',\n      text: { type: 'plain_text', text: `${$json.score_badge || '🔥'} Lead mới — Khớp từ khóa tìm kiếm Website` }\n    },\n    {\n      type: 'section',\n      fields: [\n        { type: 'mrkdwn', text: `*👤 Tác giả:*\\n${$json.author}` },\n        { type: 'mrkdwn', text: `*📊 Phân loại:*\\n${$json.score_reason}` }\n      ]\n    },\n    {\n      type: 'section',\n      text: { type: 'mrkdwn', text: `*📝 Nội dung bài:*\\n> ${String($json.message || '').replace(/\\n/g, '\\n> ').substring(0, 400)}` }\n    },\n    { type: 'divider' },\n    {\n      type: 'section',\n      text: { type: 'mrkdwn', text: `*💬 Nội dung comment:*\\n\"\"\"${$json.ai_comment}\"\"\"\\n> 🤖 *Trạng thái Bot:* ${$json.bot_status_text || ($json.comment_success ? '✅ Đã tự động post comment' : '⚠️ Lỗi comment')}` }\n    },\n    {\n      type: 'actions',\n      elements: [\n        {\n          type: 'button',\n          text: { type: 'plain_text', text: '🔗 Mở bài Facebook' },\n          url: $json.permalink || 'https://www.facebook.com',\n          action_id: 'open_fb_post',\n          style: 'primary'\n        },\n        {\n          type: 'button',\n          text: { type: 'plain_text', text: '⏭️ Bỏ qua' },\n          action_id: 'skip',\n          value: JSON.stringify({ post_id: $json.post_id }),\n          style: 'danger'\n        }\n      ]\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "node-slack",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1900, 200]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes":                   { "main": [[{ "node": "Local Scraper: Scrape Group Posts",  "type": "main", "index": 0 }]] },
+    "Local Scraper: Scrape Group Posts": { "main": [[{ "node": "Dedup + Filter Recent",              "type": "main", "index": 0 }]] },
+    "Dedup + Filter Recent":             { "main": [[{ "node": "Keyword Match?",                     "type": "main", "index": 0 }]] },
+    "Keyword Match?":                    { "main": [[{ "node": "Prepare Lead & Fixed Comment",        "type": "main", "index": 0 }], []] },
+    "Prepare Lead & Fixed Comment":      { "main": [[{ "node": "Save to stark_leads",                 "type": "main", "index": 0 }]] },
+    "Save to stark_leads":               { "main": [[{ "node": "Filter New Leads Only",               "type": "main", "index": 0 }]] },
+    "Filter New Leads Only":             { "main": [[{ "node": "Auto Post Comment",                  "type": "main", "index": 0 }]] },
+    "Auto Post Comment":                 { "main": [[{ "node": "Merge Lead & Comment Result",         "type": "main", "index": 0 }]] },
+    "Merge Lead & Comment Result":       { "main": [[{ "node": "Send Slack Notification",             "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "STARK" }]
+}
