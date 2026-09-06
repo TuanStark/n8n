@@ -5,12 +5,15 @@ import path from 'path';
 import { config } from './config';
 import { pool } from './db/pool';
 import { PipelineRunner } from './workers/pipelineRunner';
+import { AutoScheduler } from './scheduler/autoScheduler';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const runner = new PipelineRunner();
+const scheduler = new AutoScheduler(runner);
+scheduler.start();
 
 // 1. Health check endpoint
 app.get('/health', async (req, res) => {
@@ -115,6 +118,14 @@ app.get('/api/preview/:filename', (req, res) => {
     res.writeHead(200, head);
     fs.createReadStream(filePath).pipe(res);
   }
+});
+
+// 6. Schedule inspection endpoint
+app.get('/api/schedule', (req, res) => {
+  res.json({
+    success: true,
+    schedule: scheduler.getStatus(),
+  });
 });
 
 app.listen(config.port, () => {

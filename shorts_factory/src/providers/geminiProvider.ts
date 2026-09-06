@@ -262,4 +262,36 @@ Output JSON:
     const raw = await this.callGemini(prompt);
     return this.safeJsonParse(raw);
   }
+
+  async ideateHistoricalTopics(count: number = 5): Promise<Array<{
+    title: string;
+    category: 'ancient_rome' | 'ancient_greece' | 'ancient_egypt';
+    historical_period: string;
+    concept_summary: string;
+    potential_score: number;
+  }>> {
+    const system = `You are a Lead Content Strategist for an elite YouTube Shorts channel ("Paper Theater World").
+Target audience: Western / Tier-1 (US, UK, CA, AU) history enthusiasts who love dramatic, untold, dark, or surprising historical events in Ancient Rome, Ancient Greece, and Ancient Egypt.
+Every topic MUST have a powerful psychological hook, zero clichés (no "Did you know"), and high debate potential.`;
+
+    const prompt = `Generate ${count} compelling historical topics for YouTube Shorts.
+Return JSON strictly in this structure:
+{
+  "topics": [
+    {
+      "title": "Punchy title under 70 characters",
+      "category": "ancient_rome",
+      "historical_period": "Late Roman Republic (49 BC)",
+      "concept_summary": "1-2 sentences summarizing the dramatic angle and myth debunked",
+      "potential_score": 9.4
+    }
+  ]
 }
+Valid categories: ancient_rome, ancient_greece, ancient_egypt.`;
+
+    const raw = await this.callGemini(prompt, system);
+    const data = this.safeJsonParse<{ topics: any[] }>(raw);
+    return data.topics || [];
+  }
+}
+
