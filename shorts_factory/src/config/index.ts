@@ -30,6 +30,12 @@ export const config = {
     botToken: process.env.SLACK_BOT_TOKEN || '',
     channelId: process.env.SLACK_CHANNEL_ID || '',
   },
+  youtube: {
+    clientId: process.env.YOUTUBE_CLIENT_ID || '',
+    clientSecret: process.env.YOUTUBE_CLIENT_SECRET || '',
+    refreshToken: process.env.YOUTUBE_REFRESH_TOKEN || '',
+    defaultPrivacy: process.env.YOUTUBE_DEFAULT_PRIVACY || 'unlisted',
+  },
   storage: {
     baseDir: process.env.STORAGE_DIR || path.resolve(__dirname, '../../storage'),
     raw: path.resolve(process.env.STORAGE_DIR || '../../storage', 'raw'),

@@ -41,6 +41,7 @@ pnpm-debug.log*
 # ==============================================================================
 # GENERATED MEDIA, CACHE & RUNTIME FILES (Ảnh AI, file tạm, cache)
 # ==============================================================================
+shorts_factory/storage/
 generated_images/
 */generated_images/
 *.jpg

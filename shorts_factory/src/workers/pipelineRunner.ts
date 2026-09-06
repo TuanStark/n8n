@@ -5,6 +5,7 @@ import { AssSubtitleBuilder } from '../render/assSubtitleBuilder';
 import { FFmpegEngine, SceneInput } from '../render/ffmpegEngine';
 import { QcValidator } from '../qc/qcValidator';
 import { SlackNotifier } from '../notifications/slackNotifier';
+import { YouTubePublisher } from '../publish/youtubePublisher';
 
 export class PipelineRunner {
   private gemini: GeminiProvider;
@@ -13,6 +14,7 @@ export class PipelineRunner {
   private ffmpeg: FFmpegEngine;
   private qc: QcValidator;
   private slack: SlackNotifier;
+  private youtube: YouTubePublisher;
 
   constructor() {
     this.gemini = new GeminiProvider();
@@ -21,6 +23,7 @@ export class PipelineRunner {
     this.ffmpeg = new FFmpegEngine();
     this.qc = new QcValidator();
     this.slack = new SlackNotifier();
+    this.youtube = new YouTubePublisher();
   }
 
   async runFullPipelineForTopic(topicId?: string): Promise<any> {
@@ -232,8 +235,49 @@ export class PipelineRunner {
         ]
       );
 
+      // 9. YouTube Publishing
+      let youtubeVideoId: string | undefined;
+      let youtubeUrl: string | undefined;
+
+      if (this.youtube.isConfigured() && qcResult.overallStatus !== 'FAIL') {
+        console.log(`[Pipeline] Step 8: Publishing short to YouTube (#Shorts)...`);
+        try {
+          const uploadRes = await this.youtube.uploadShort(renderRes.outputPath, {
+            title: topic.title,
+            description: scriptData.full_script,
+            category: topic.category,
+            privacyStatus: 'unlisted',
+          });
+
+          youtubeVideoId = uploadRes.videoId;
+          youtubeUrl = uploadRes.youtubeUrl;
+
+          // Record in shorts_factory.youtube_videos
+          await client.query(
+            `INSERT INTO youtube_videos (
+              topic_id, render_job_id, youtube_video_id, title, description, tags, privacy_status, upload_status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'UPLOADED')`,
+            [
+              topic.id,
+              renderJobId,
+              uploadRes.videoId,
+              uploadRes.title.slice(0, 100),
+              scriptData.full_script,
+              ['Shorts', 'history', 'papertheater', topic.category],
+              uploadRes.privacyStatus,
+            ]
+          );
+          console.log(`[Pipeline] Successfully published to YouTube: ${uploadRes.youtubeUrl}`);
+        } catch (uploadErr) {
+          console.error(`[Pipeline] YouTube upload error:`, uploadErr);
+        }
+      }
+
       // Update topic status
-      const nextTopicStatus = qcResult.overallStatus === 'FAIL' ? 'IDEA' : 'RESEARCH_READY';
+      const nextTopicStatus = (qcResult.overallStatus !== 'FAIL' && youtubeVideoId)
+        ? 'PUBLISHED'
+        : (qcResult.overallStatus === 'FAIL' ? 'IDEA' : 'RESEARCH_READY');
+
       await client.query('UPDATE topics SET status = $1, used_at = NOW() WHERE id = $2', [
         nextTopicStatus,
         topic.id,
@@ -251,6 +295,7 @@ export class PipelineRunner {
         styleAdherenceScore: qcResult.aiVisionChecks.styleAdherenceScore,
         rejectionReasons: qcResult.rejectionReasons,
         outputPath: renderRes.outputPath,
+        youtubeUrl,
       });
 
       return {
@@ -262,6 +307,8 @@ export class PipelineRunner {
         durationSec: renderRes.durationSec,
         fileSizeBytes: renderRes.fileSizeBytes,
         qcResult,
+        youtubeVideoId,
+        youtubeUrl,
       };
     } finally {
       client.release();

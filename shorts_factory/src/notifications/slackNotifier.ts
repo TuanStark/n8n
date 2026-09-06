@@ -9,6 +9,7 @@ export interface SlackNotificationPayload {
   styleAdherenceScore: number;
   rejectionReasons: string[];
   outputPath: string;
+  youtubeUrl?: string;
 }
 
 export class SlackNotifier {
@@ -29,6 +30,22 @@ export class SlackNotifier {
     const statusIcon = data.overallStatus === 'PASS' ? '✅ PASS' : data.overallStatus === 'WARNING' ? '⚠️ WARNING' : '❌ FAIL';
     const adherencePct = (data.styleAdherenceScore * 100).toFixed(0);
 
+    const fields: any[] = [
+      { type: 'mrkdwn', text: `*Topic:*\n${data.title}` },
+      { type: 'mrkdwn', text: `*Category:*\n${data.category.toUpperCase()}` },
+      { type: 'mrkdwn', text: `*Duration:*\n${data.durationSec.toFixed(1)}s (1080x1920 9:16)` },
+      { type: 'mrkdwn', text: `*QC Decision:*\n${statusIcon}` },
+      { type: 'mrkdwn', text: `*Style Adherence:*\n${adherencePct}% (Papercraft Diorama)` },
+      { type: 'mrkdwn', text: `*Output File:*\n\`${data.outputPath}\`` },
+    ];
+
+    if (data.youtubeUrl) {
+      fields.push({
+        type: 'mrkdwn',
+        text: `*YouTube Shorts:*\n<${data.youtubeUrl}|▶️ Watch Video>`,
+      });
+    }
+
     const blocks: any[] = [
       {
         type: 'header',
@@ -40,14 +57,7 @@ export class SlackNotifier {
       },
       {
         type: 'section',
-        fields: [
-          { type: 'mrkdwn', text: `*Topic:*\n${data.title}` },
-          { type: 'mrkdwn', text: `*Category:*\n${data.category.toUpperCase()}` },
-          { type: 'mrkdwn', text: `*Duration:*\n${data.durationSec.toFixed(1)}s (1080x1920 9:16)` },
-          { type: 'mrkdwn', text: `*QC Decision:*\n${statusIcon}` },
-          { type: 'mrkdwn', text: `*Style Adherence:*\n${adherencePct}% (Papercraft Diorama)` },
-          { type: 'mrkdwn', text: `*Output File:*\n\`${data.outputPath}\`` },
-        ],
+        fields,
       },
     ];
 
@@ -61,31 +71,42 @@ export class SlackNotifier {
       });
     }
 
-    // Add interactive action buttons for approval
+    const actionElements: any[] = [];
+    if (data.youtubeUrl) {
+      actionElements.push({
+        type: 'button',
+        text: { type: 'plain_text', text: '▶️ Watch on YouTube', emoji: true },
+        url: data.youtubeUrl,
+        style: 'primary',
+      });
+    }
+
+    actionElements.push(
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: '✅ Approve', emoji: true },
+        value: JSON.stringify({ action: 'APPROVE', shortId: data.shortId }),
+        action_id: 'approve_short',
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: '🔄 Regenerate', emoji: true },
+        value: JSON.stringify({ action: 'REGENERATE', shortId: data.shortId }),
+        action_id: 'regenerate_short',
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: '❌ Discard', emoji: true },
+        style: 'danger',
+        value: JSON.stringify({ action: 'DISCARD', shortId: data.shortId }),
+        action_id: 'discard_short',
+      }
+    );
+
+    // Add interactive action buttons
     blocks.push({
       type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '✅ Approve & Schedule Upload', emoji: true },
-          style: 'primary',
-          value: JSON.stringify({ action: 'APPROVE', shortId: data.shortId }),
-          action_id: 'approve_short',
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '🔄 Regenerate Scenes', emoji: true },
-          value: JSON.stringify({ action: 'REGENERATE', shortId: data.shortId }),
-          action_id: 'regenerate_short',
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '❌ Discard', emoji: true },
-          style: 'danger',
-          value: JSON.stringify({ action: 'DISCARD', shortId: data.shortId }),
-          action_id: 'discard_short',
-        },
-      ],
+      elements: actionElements,
     });
 
     try {
