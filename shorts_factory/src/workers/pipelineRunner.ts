@@ -6,6 +6,7 @@ import { FFmpegEngine, SceneInput } from '../render/ffmpegEngine';
 import { QcValidator } from '../qc/qcValidator';
 import { SlackNotifier } from '../notifications/slackNotifier';
 import { YouTubePublisher } from '../publish/youtubePublisher';
+import { ImageProvider } from '../providers/imageProvider';
 
 export class PipelineRunner {
   private gemini: GeminiProvider;
@@ -15,6 +16,7 @@ export class PipelineRunner {
   private qc: QcValidator;
   private slack: SlackNotifier;
   private youtube: YouTubePublisher;
+  private imageProvider: ImageProvider;
 
   constructor() {
     this.gemini = new GeminiProvider();
@@ -24,6 +26,7 @@ export class PipelineRunner {
     this.qc = new QcValidator();
     this.slack = new SlackNotifier();
     this.youtube = new YouTubePublisher();
+    this.imageProvider = new ImageProvider();
   }
 
   async runFullPipelineForTopic(topicId?: string): Promise<any> {
@@ -147,11 +150,17 @@ export class PipelineRunner {
 
         sceneDescriptions.push(sc.visual_description);
 
-        // Ensure visual asset layer placeholder for diorama rendering
-        const imagePath = await this.ffmpeg.ensurePlaceholderImage(
-          sc.scene_index,
-          `${topic.category.toUpperCase()}: Scene ${sc.scene_index}`
-        );
+        // Generate authentic AI Papercraft Diorama visual artwork
+        console.log(`[Pipeline] Generating visual artwork for Scene ${sc.scene_index}/${storyboardData.scenes.length}...`);
+        const imagePath = await this.imageProvider.generateSceneImage({
+          storyboardId,
+          sceneIndex: sc.scene_index,
+          category: topic.category,
+          visualDescription: sc.visual_description,
+          characters: sc.characters,
+          location: sc.location,
+          positivePrompt: sc.positive_prompt,
+        });
 
         sceneInputs.push({
           sceneIndex: sc.scene_index,

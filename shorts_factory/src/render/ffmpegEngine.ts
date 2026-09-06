@@ -79,18 +79,30 @@ export class FFmpegEngine {
     try {
       const sceneVideoPaths: string[] = [];
 
-      // 1. Render each scene image into a 1080x1920 clip with 2.5D diorama pan
+      // 1. Render each scene image into a 1080x1920 clip with dynamic 2.5D diorama camera motion
       for (const scene of scenes) {
         const sceneClipPath = path.join(tempDir, `scene_${scene.sceneIndex}.mp4`);
         const duration = Math.max(2, scene.durationSec);
         const frames = Math.round(duration * 30);
 
-        // Ultra-fast 1080x1920 diorama scaling
-        const filter = `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p`;
+        // Dynamic Ken Burns motion tailored to scene movement
+        let motionFilter: string;
+        const mov = (scene.cameraMovement || '').toLowerCase();
 
-        const renderSceneCmd = `ffmpeg -y -loop 1 -t ${duration} -i "${scene.imagePath}" \
-          -vf "${filter}" \
-          -c:v libx264 -pix_fmt yuv420p -preset ultrafast -r 30 \
+        if (mov.includes('pan') || scene.sceneIndex % 3 === 2) {
+          // Subtle horizontal pan across papercraft cutouts
+          motionFilter = `zoompan=z=1.14:d=${frames}:x='if(lte(on,1),(iw-iw/zoom)*0.2,x+0.5)':y='(ih-ih/zoom)/2':s=1080x1920:fps=30,format=yuv420p`;
+        } else if (mov.includes('out') || scene.sceneIndex % 3 === 0) {
+          // Dramatic reveal pull-out
+          motionFilter = `zoompan=z='max(1.18-0.0012*on,1.0)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,format=yuv420p`;
+        } else {
+          // Slow cinematic focus push-in
+          motionFilter = `zoompan=z='min(zoom+0.0012,1.2)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,format=yuv420p`;
+        }
+
+        const renderSceneCmd = `ffmpeg -y -i "${scene.imagePath}" \
+          -vf "${motionFilter}" \
+          -c:v libx264 -pix_fmt yuv420p -preset ultrafast -frames:v ${frames} \
           "${sceneClipPath}"`;
 
         await execAsync(renderSceneCmd);
