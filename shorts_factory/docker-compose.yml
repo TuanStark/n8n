@@ -1,0 +1,48 @@
+name: shorts-factory-stack
+
+services:
+  shorts-redis:
+    image: redis:7-alpine
+    container_name: shorts-factory-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - shorts_redis_data:/data
+    networks:
+      - n8n_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  shorts-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shorts-factory-worker
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      shorts-redis:
+        condition: service_healthy
+    volumes:
+      - ./storage:/app/storage
+    networks:
+      - n8n_internal
+    ports:
+      - "127.0.0.1:4100:4100"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4100/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+networks:
+  n8n_internal:
+    external: true
+    name: n8n-prod_n8n_internal
+
+volumes:
+  shorts_redis_data:
+    name: shorts_factory_redis_data
