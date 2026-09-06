@@ -8,7 +8,36 @@
       "name": "When Called By Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [100, 300]
+      "position": [100, 420]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 8 * * *"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "45 11 * * *"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "15 17 * * *"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "30 20 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger-schedule-golden-hours",
+      "name": "Golden Hours (08:30, 11:45, 17:15, 20:30)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 200]
     },
     {
       "parameters": {
@@ -18,7 +47,7 @@
       "name": "Generate Content, QA & ShortLink",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
-      "position": [340, 300]
+      "position": [380, 300]
     },
     {
       "parameters": {
@@ -36,11 +65,22 @@
       "name": "Check If Items Queued",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [580, 300]
+      "position": [620, 300]
     }
   ],
   "connections": {
     "When Called By Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Generate Content, QA & ShortLink",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Golden Hours (08:30, 11:45, 17:15, 20:30)": {
       "main": [
         [
           {

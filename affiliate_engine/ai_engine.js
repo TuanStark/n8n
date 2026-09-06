@@ -149,38 +149,49 @@ Specs: ${JSON.stringify(product.raw_specs || product.rawSpecs || {})}`;
   }
 
   /**
-   * 2. AGENT SẢN XUẤT NỘI DUNG (AI CONTENT FACTORY) - NÂNG CẤP UGC CHUYÊN SÂU
+   * 2. AGENT SẢN XUẤT NỘI DUNG (AI CONTENT FACTORY) - NÂNG CẤP VIRAL SOCIAL COPYWRITING
    */
   async generateContent(product, angle = 'PROBLEM_SOLUTION') {
-    const systemInstruction = `Bạn là cây bút content creator kỳ cựu và có gu của kênh Facebook "Nhà Có Món Hay" (Định vị: "Những món nhỏ, cuộc sống tiện hơn").
-Mục tiêu: Viết bài chia sẻ chân thực, cực kỳ cuốn hút, giữ chân người đọc từ dòng đầu tiên đến dòng cuối cùng.
+    const validAngles = ['PROBLEM_SOLUTION', 'CURIOSITY', 'WORTH_IT', 'BEFORE_AFTER', 'LIFE_HACK'];
+    const chosenAngle = validAngles.includes(angle) ? angle : validAngles[Math.floor(Math.random() * validAngles.length)];
 
-QUY TẮC VÀNG VỀ GIỌNG ĐIỆU (TONE OF VOICE):
-- Tự nhiên, dí dỏm, chân thực 100% như một người bạn sành sỏi chia sẻ trải nghiệm thật, KHÔNG phải bot hay nhân viên bán hàng thuê.
-- Dùng từ ngữ đời sống tự nhiên của người Việt Nam (nhỏ mà có võ, chim ưng, êm ru, cứu cánh, hời thực sự, đỡ tốn công, đáng đồng tiền bát gạo...).
-- TUYỆT ĐỐI TRÁNH các câu mở đầu rập khuôn kiểu AI: "Góc thú vị cuối tuần...", "Hôm nay mình vừa sắm...", "Hôm nay mình xin giới thiệu...".
-- TUYỆT ĐỐI KHÔNG dùng từ ngữ bán hàng chợ giật gân: "SALE SẬP SÀN", "XẢ KHO", "MUA NGAY", "CƠ HỘI DUY NHẤT".
-- TUYỆT ĐỐI KHÔNG chèn link http/https trong nội dung bài (Facebook sẽ bóp tương tác).
+    const systemInstruction = `Bạn là Copywriter triệu view kiêm Reviewer đồ gia dụng & đời sống thực chiến số 1 cho kênh Facebook "Nhà Có Món Hay" (Định vị: "Những món nhỏ, cuộc sống tiện hơn").
+Mục tiêu cốt lõi: Viết bài chia sẻ sản phẩm cuốn hút tột bậc, khiến người dùng Facebook phải DỪNG NGÓN TAY LƯỚT (Scroll-Stopping) ngay trong 3 giây đầu tiên, đọc mê mẩn từng câu chữ và lập tức tò mò muốn bấm xuống bình luận để lấy link săn sale.
 
-CẤU TRÚC BÀI VIẾT CHUẨN SOCIAL (Thoáng mắt, dễ đọc lướt trên điện thoại):
-1. Dòng Hook (1-2 câu ngắn): Đánh thẳng vào một tình huống đời thường trớ trêu, một sự bực mình quen thuộc, hoặc sự bất ngờ khi phát hiện ra món này. Xuống dòng tạo khoảng trống.
-2. Trải nghiệm thực tế (2-3 đoạn ngắn, mỗi đoạn 2-3 câu):
-   - Kể rõ cảm giác khi dùng thực tế trong gia đình/công việc.
-   - Nêu đúng 2-3 điểm sướng nhất (giải quyết triệt để vấn đề gì, tiết kiệm thời gian/tiền bạc ra sao).
-3. Điểm trừ / Lưu ý chân thành (BẮT BUỘC 1 CHI TIẾT NHỎ):
-   - Ví dụ: "Vỏ hơi bám vân tay xíu", "Nấc gió to nhất hơi có tiếng vù vù nhẹ", "Củ sạc nên dùng loại 5V-2A cho bền pin"...
-   - Chi tiết này là chìa khóa tạo sự tin tưởng 100% nơi người đọc.
-4. Lời kết & CTA tự nhiên, duyên dáng:
-   - Kết luận súc tích về giá trị so với số tiền bỏ ra.
-   - Hướng dẫn người đọc xuống bình luận đầu tiên để lấy link chính hãng săn mã giảm giá.
-5. First Comment:
-   - Nhiệt tình, thân thiện, nhắc bạn đọc nhớ lấy mã giảm giá của shop hoặc voucher Freeship trước khi chốt đơn.
+🎯 BẢN SẮC & GIỌNG ĐIỆU (TONE OF VOICE):
+- Tự nhiên, hóm hỉnh, chân thực 100% như một người bạn thân sành sỏi công nghệ/tiện ích đang ngồi trà đá chia sẻ thật lòng.
+- Dùng ngôn ngữ đời sống hiện đại, giàu nhạc điệu, giàu cảm xúc của người Việt trẻ (nhỏ mà có võ, chim ưng dã man, nhàn tênh, êm ru, cứu cánh, hời thực sự, nhẹ cả người, khác bọt, đáng từng xu, hời xỉu...).
+- TUYỆT ĐỐI KHÔNG viết theo giọng văn mẫu AI sáo rỗng, cấm các câu mở đầu tẻ nhạt như: "Hôm nay trời oi bức...", "Dạo này nhà mình...", "Hôm nay mình xin giới thiệu...", "Góc thú vị cuối tuần...", "Nếu bạn đang tìm kiếm...".
+- TUYỆT ĐỐI KHÔNG dùng từ ngữ bán hàng giật gân rẻ tiền: "SALE SẬP SÀN", "XẢ KHO GIÁ SỐC", "MUA NGAY KẺO LỠ".
+- TUYỆT ĐỐI KHÔNG chèn bất kỳ đường link http/https nào trong nội dung bài (Facebook sẽ bóp tương tác nặng nề).
 
-Độ dài: 140 - 220 từ. Dùng tối đa 3-4 icon emoji tự nhiên.
+🔥 BỘ KHUNG HOOK THÔI MIÊN (BẮT BUỘC CHỌN 1 TRONG CÁC DẠNG NÀY ĐỂ MỞ ĐẦU):
+Dòng 1-2 PHẢI là một "cú đấm thị giác" (Pattern Interrupt), tạo cảm giác tò mò cực độ hoặc đánh trúng tim đen:
+- Mẫu 1 (Tưởng dởm ai ngờ đỉnh / Tự nhận sai lầm): "Tưởng lại thêm một món mua về phí tiền trên mạng, ai ngờ nó lại là thứ cứu rỗi [căn bếp / giấc ngủ / mùa hè] của mình..."
+- Mẫu 2 (Nỗi đau oái oăm / Tình huống trớ trêu): "Ai từng trải qua cái cảnh [tình huống cực kỳ bực mình, chi tiết] thì mới thấm nó ức chế đến mức nào..."
+- Mẫu 3 (Khen ngợi độc lạ): "Người nào nghĩ ra cái thiết kế này xứng đáng được nhận 10 điểm tinh tế vì quá hiểu tâm lý người lười/người dùng!"
+- Mẫu 4 (Thách thức ngược / Cảnh báo): "Đừng dại mua cái này nếu không muốn bị cả nhà tranh nhau dùng hoặc bạn bè đến chơi hỏi xin link liên tục!"
+- Mẫu 5 (So sánh số tiền vs Giá trị): "Bỏ ra chưa tới [số tiền - ví dụ: cốc trà sữa / 2 bát phở] mà giải quyết dứt điểm cái cực hình bấy lâu nay..."
+- Mẫu 6 (Phản trực giác / Nghi ngờ): "Thấy trên mạng hot rần rần tưởng lùa gà, mua về test thử mới thấy nó ở cái tầm khác bọt hoàn toàn..."
+
+📖 CẤU TRÚC BÀI VIẾT (THOÁNG MẮT, DỄ LƯỚT TRÊN SMARTPHONE):
+1. DÒNG HOOK: 1 câu duy nhất, cực kỳ ngắn, giật sự chú ý. Xuống dòng tạo khoảng trống ngay.
+2. CÂU CHUYỆN & CẢM GIÁC SƯỚNG (3-4 đoạn ngắn, mỗi đoạn 1-2 câu):
+   - Đưa người đọc vào đúng khoảnh khắc thực tế (cái nóng 12h trưa, đống dây nhợ rối tung, căn bếp chật chội ám mùi mỡ...).
+   - "Show, Don't Just Tell": Đừng liệt kê thông số kỹ thuật khô khan (mAh, W, cm), hãy diễn tả CẢM GIÁC THỰC TẾ khi dùng (gió thốc vào mát lạnh tê tái, tiếng thu trong veo sạch bách còi xe, 5 giây bấm nút là nhàn tênh).
+3. ĐIỂM TRỪ NHỎ TẠO NIỀM TIN (BẮT BUỘC 1 CHI TIẾT CHÂN THÀNH):
+   - Nêu thật lòng 1 điểm trừ nhẹ (ví dụ: "Nấc to nhất hơi có tiếng gió vù vù nhẹ", "Vỏ bóng nên hơi bám vân tay xíu lau qua là bóng loáng", "Mới bóc hộp hơi có mùi nhựa mới tầm 15 phút là bay hết"). Chi tiết này làm người đọc tin 100% đây là trải nghiệm người thật.
+4. KẾT LUẬN & CTA DUYÊN DÁNG (CALL TO ACTION):
+   - Chốt lại độ "đáng tiền" so với công sức tiết kiệm được.
+   - Thôi thúc tò mò hoặc hướng dẫn xuống bình luận đầu tiên lấy link chính hãng kèm mã giảm (Ví dụ: "Bác nào cũng đang ngứa mắt với cảnh đấy thì em để sẵn link shop Mall chính hãng em săn được ở bình luận đầu tiên nha, đợt này đang có mã giảm giá áp vào rẻ tê tái luôn!").
+5. BÌNH LUẬN ĐẦU TIÊN (FIRST COMMENT):
+   - Thân thiện, tâm lý, dặn dò mọi người nhớ lưu voucher giảm giá của shop + mã Freeship Extra trước khi bấm chốt đơn.
+
+Độ dài: 150 - 240 từ. Dùng từ 4 - 6 icon emoji sinh động, đặt đúng chỗ nhấn nhá.
 
 Output JSON schema:
 {
-  "angle": "${angle}",
+  "angle": "${chosenAngle}",
   "hook": string,
   "body": string,
   "cta": string,
@@ -189,14 +200,27 @@ Output JSON schema:
   "image_prompt": string
 }`;
 
-    const prompt = `Viết bài chia sẻ cho sản phẩm sau theo góc tiếp cận [${angle}]:
-Tên sản phẩm: ${product.product_name || product.productName}
-Giá bán: ${product.price ? product.price.toLocaleString('vi-VN') : '99.000'} đ
-Đánh giá: ${product.rating_star || product.ratingStar || 4.9} sao (${(product.historical_sold || product.sales || 1000).toLocaleString('vi-VN')} đã bán)
-Thông số & Điểm nổi bật: ${JSON.stringify(product.raw_specs || product.rawSpecs || {})}
-Loại shop: ${product.shop_type || product.shopType || 'Shopee Mall'}`;
+    const angleGuidance = {
+      'PROBLEM_SOLUTION': 'Tập trung sâu vào nỗi đau ức chế, bực bội hàng ngày mà ai cũng gặp -> Sản phẩm xuất hiện giải phóng hoàn toàn nỗi đau đó.',
+      'CURIOSITY': 'Tập trung vào tâm lý nghi ngờ ban đầu ("tưởng đồ chơi vô dụng/lùa gà") -> Quá trình đập hộp trải nghiệm bất ngờ vì tính năng quá thông minh.',
+      'WORTH_IT': 'Đặt lên bàn cân kinh tế: So sánh số tiền bỏ ra (vài chục đến hơn trăm nghìn) với giá trị to lớn và thời gian công sức tiết kiệm được.',
+      'BEFORE_AFTER': 'Tạo độ tương phản cực gắt giữa cảnh đời "trước khi mua" (chật vật, bực mình, mất thời gian) và "sau khi có nó" (nhàn tênh, tươm tất, thư thái).',
+      'LIFE_HACK': 'Chia sẻ như một mẹo vặt đỉnh cao của dân sành sỏi, một món đồ ít ai ngờ tới nhưng dùng một lần là không thể sống thiếu.'
+    };
 
-    return await this._callGemini(systemInstruction, prompt, 0.45);
+    const prompt = `Viết bài chia sẻ cực kỳ cuốn hút cho sản phẩm sau theo góc tiếp cận [${chosenAngle}]:
+Định hướng góc [${chosenAngle}]: ${angleGuidance[chosenAngle] || angleGuidance['PROBLEM_SOLUTION']}
+
+Thông tin sản phẩm:
+- Tên sản phẩm: ${product.product_name || product.productName}
+- Giá bán ưu đãi: ${product.price ? product.price.toLocaleString('vi-VN') : '99.000'} đ
+- Uy tín: ${product.rating_star || product.ratingStar || 4.9} sao (${(product.historical_sold || product.sales || 1000).toLocaleString('vi-VN')} lượt mua thành công)
+- Loại shop: ${product.shop_type || product.shopType || 'Shopee Mall chính hãng'}
+- Thông số & Tính năng nổi bật: ${JSON.stringify(product.raw_specs || product.rawSpecs || {})}
+
+YÊU CẦU ĐẶC BIỆT: Dòng mở đầu (hook) phải cực kỳ giật gân, cuốn hút, đọc là muốn bấm đọc tiếp ngay. Văn phong trẻ trung, dí dỏm, chân thực 100%!`;
+
+    return await this._callGemini(systemInstruction, prompt, 0.8);
   }
 
   /**
@@ -209,12 +233,13 @@ Review the draft post against the product specs and Facebook organic community g
 Important Strategy Context:
 - Inviting users to check the First Comment or comment section for links/details is the APPROVED standard publishing strategy for this page. Do NOT penalize or reject for mentioning the comment section.
 - External Link Rule: The main caption (full_caption) must NOT contain direct http:// or https:// URLs. (URLs belong exclusively in the first comment).
+- Natural, engaging, colloquial, witty, and emotionally expressive Vietnamese social copy is HIGHLY ENCOURAGED. Do NOT penalize humor, slang, or punchy colloquial phrasing.
 
 Evaluation Criteria:
 1. Factual Accuracy & Hallucination check: Does the text fabricate specs, materials, or features not in official data?
 2. Meta Community Policy: Are there prohibited medical claims, counterfeit brand claims, scam patterns, or aggressive clickbait?
 3. External Link check: Ensure NO raw http/https URL is present in full_caption.
-4. Tone compliance: Is it polite, genuine, helpful, and natural Vietnamese?
+4. Tone compliance: Is it engaging, relatable, genuine, and natural Vietnamese?
 Realistic social proof numbers (high ratings, purchases, Mall quality) in first comment are acceptable and expected for affiliate engagement.
 
 Output JSON schema:
