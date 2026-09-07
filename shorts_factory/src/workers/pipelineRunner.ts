@@ -167,6 +167,8 @@ export class PipelineRunner {
           durationSec: sc.duration_sec,
           imagePath,
           cameraMovement: sc.camera_movement,
+          videoPrompt: sc.video_prompt,
+          paperAsmrCues: sc.paper_asmr_cues,
         });
       }
 

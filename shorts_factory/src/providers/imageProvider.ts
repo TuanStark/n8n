@@ -16,6 +16,9 @@ export interface SceneImageParams {
   positivePrompt?: string;
 }
 
+const MANDATORY_PAPER_SUFFIX =
+  'Every object must appear physically handcrafted from individually cut paper pieces, with dramatic stacked cardstock layers, visible paper thickness, exposed cut edges, deep shadow separation, and realistic handcrafted paper textures. Every visible surface must reveal layer-after-layer paper construction. The composition must remain clean, minimal, and editorial with generous negative space. No flat surfaces. No digital illustration. No clutter. Premium handcrafted stop-motion paper aesthetic. Masterpiece. Ultra-detailed. 8K. No text. No logos. No watermark.';
+
 export class ImageProvider {
   private rawStorageDir: string;
 
@@ -27,7 +30,7 @@ export class ImageProvider {
   }
 
   /**
-   * Generates a 9:16 vertical visual artwork for a scene (AI Papercraft or Classical Historical Art)
+   * Generates a 9:16 vertical visual artwork for a scene following the Master GPT Prompt rules
    */
   async generateSceneImage(params: SceneImageParams): Promise<string> {
     const filename = `scene_${params.storyboardId}_${params.sceneIndex}.jpg`;
@@ -38,141 +41,133 @@ export class ImageProvider {
       return outputPath;
     }
 
-    // Compose rich prompt for AI generation
-    const styleAnchors = [
-      'handcrafted miniature paper theater diorama',
-      'layered cut paper sculpture',
-      'dramatic chiaroscuro lighting',
-      'miniature stage set',
-      'macro photography',
-      '9:16 vertical ratio',
-    ].join(', ');
+    // Build the master prompt without truncation
+    let fullPrompt = (params.positivePrompt || params.visualDescription || '').trim();
+    if (!fullPrompt) {
+      fullPrompt = `Handcrafted paper stop-motion miniature diorama of ${params.category.replace('_', ' ')}, ${params.location || 'ancient arena'}`;
+    }
 
-    const subject = (params.positivePrompt || params.visualDescription || `${params.category} historical scene`).replace(/["\n\r]/g, ' ').slice(0, 140);
-    const fullPrompt = `${subject}, ${styleAnchors}`;
+    // Ensure mandatory suffix is present
+    if (!fullPrompt.includes('Every object must appear physically handcrafted')) {
+      fullPrompt = `${fullPrompt}. ${MANDATORY_PAPER_SUFFIX}`;
+    }
 
-    console.log(`[ImageProvider] 🎨 Requesting AI artwork for Scene ${params.sceneIndex}: "${subject.slice(0, 60)}..."`);
+    // Craft anchors ensuring genuine paper theater rather than 3D wax
+    const craftAnchorPrompt = `Kirigami layered paper cut art, physical layered cardstock papercraft diorama, ${fullPrompt}, borderless paper art, no frame, no shadowbox, no wooden box, no 3D digital render`;
 
-    // 1. Try Pollinations AI with short timeout (8s)
-    try {
-      const seed = Math.floor(Math.random() * 999999);
-      const encodedPrompt = encodeURIComponent(fullPrompt);
-      const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=720&height=1280&model=flux&nologo=true&seed=${seed}`;
+    console.log(`[ImageProvider] 🎨 Generating Papercraft Master Artwork for Scene ${params.sceneIndex}...`);
+    console.log(`[ImageProvider] Prompt preview: "${craftAnchorPrompt.slice(0, 120)}..." (Length: ${craftAnchorPrompt.length} chars)`);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
-
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: { 'User-Agent': 'PaperTheaterShortsFactory/1.0' },
-      });
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const buffer = Buffer.from(await response.arrayBuffer());
-        if (buffer.length > 5000) {
-          fs.writeFileSync(outputPath, buffer);
-          console.log(`[ImageProvider] ✅ Scene ${params.sceneIndex} AI artwork generated (${(buffer.length / 1024).toFixed(1)} KB)`);
-          return outputPath;
+    // 1. Try Google Gemini Image Models first if apiKey is set
+    if (config.gemini.apiKey) {
+      const geminiImageModels = ['gemini-2.5-flash-image', 'gemini-3.1-flash-image'];
+      for (const gModel of geminiImageModels) {
+        try {
+          const gUrl = `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${config.gemini.apiKey}`;
+          const gRes = await fetch(gUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: craftAnchorPrompt }] }],
+              generationConfig: { responseModalities: ['IMAGE'] },
+            }),
+          });
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            const parts = gData.candidates?.[0]?.content?.parts || [];
+            for (const p of parts) {
+              if (p.inlineData && p.inlineData.data) {
+                const imgBuf = Buffer.from(p.inlineData.data, 'base64');
+                if (imgBuf.length > 5000) {
+                  fs.writeFileSync(outputPath, imgBuf);
+                  console.log(`[ImageProvider] ✅ Scene ${params.sceneIndex} generated via ${gModel} (${(imgBuf.length / 1024).toFixed(1)} KB)`);
+                  await this.ensureStandardResolution(outputPath);
+                  return outputPath;
+                }
+              }
+            }
+          }
+        } catch (gErr: any) {
+          // Fall through to next model
         }
       }
-    } catch (err: any) {
-      console.log(`[ImageProvider] AI generation unavailable (${err.message}). Fetching authentic museum art...`);
     }
 
-    // 2. Fetch authentic classical historical museum artwork from Wikimedia Commons
-    console.log(`[ImageProvider] 🏛️ Fetching authentic classical museum artwork for Scene ${params.sceneIndex}...`);
-    const categoryName = params.category.replace('_', ' ');
-    const charName = params.characters?.[0];
-
-    let wikiUrl: string | null = null;
-    if (charName) {
-      wikiUrl = await this.searchWikimediaArtwork(`${charName} ${categoryName}`, params.sceneIndex);
-    }
-    if (!wikiUrl) {
-      wikiUrl = await this.searchWikimediaArtwork(`${categoryName} painting`, params.sceneIndex);
-    }
-    if (!wikiUrl) {
-      wikiUrl = await this.searchWikimediaArtwork(`${categoryName} history`, params.sceneIndex);
-    }
-
-    if (wikiUrl) {
+    // 2. Try Pollinations AI with Flux models and generous 45s timeout
+    const modelsToTry = ['flux', 'flux-realism', 'turbo'];
+    for (const model of modelsToTry) {
       try {
-        console.log(`[ImageProvider] Downloading museum artwork for Scene ${params.sceneIndex}: ${wikiUrl}`);
-        const imgRes = await fetch(wikiUrl, {
-          headers: { 'User-Agent': 'PaperTheaterWorldBot/1.0 (educational-shorts-bot)' },
+        console.log(`[ImageProvider] Requesting AI generation via Pollinations (model: ${model})...`);
+        const seed = Math.floor(Math.random() * 9999999);
+        const encodedPrompt = encodeURIComponent(craftAnchorPrompt);
+        const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=720&height=1280&model=${model}&nologo=true&seed=${seed}`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: { 'User-Agent': 'PaperTheaterShortsFactory/2.0' },
         });
-        if (imgRes.ok) {
-          const buffer = Buffer.from(await imgRes.arrayBuffer());
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const buffer = Buffer.from(await response.arrayBuffer());
           if (buffer.length > 5000) {
             fs.writeFileSync(outputPath, buffer);
-            console.log(`[ImageProvider] ✅ Scene ${params.sceneIndex} historical artwork downloaded (${(buffer.length / 1024).toFixed(1)} KB)`);
+            console.log(
+              `[ImageProvider] ✅ Scene ${params.sceneIndex} artwork successfully generated with ${model} (${(buffer.length / 1024).toFixed(1)} KB)`
+            );
+            // Ensure proper 1080x1920 scaling
+            await this.ensureStandardResolution(outputPath);
             return outputPath;
           }
+        } else {
+          console.warn(`[ImageProvider] Model ${model} returned HTTP ${response.status}`);
         }
       } catch (err: any) {
-        console.warn(`[ImageProvider] Wikimedia download error:`, err.message);
+        console.warn(`[ImageProvider] Attempt with model ${model} failed (${err.message}). Trying next...`);
       }
     }
 
-    // 3. Last Fallback: Generate decorative paper diorama card
-    console.warn(`[ImageProvider] Generating decorative diorama fallback for Scene ${params.sceneIndex}`);
-    return await this.generateDecorativeFallback(params, outputPath);
+    // 2. High-aesthetic Procedural Papercraft Fallback (in case of total network blackout)
+    console.warn(`[ImageProvider] AI generation endpoints unreachable. Generating procedural papercraft layered backdrop...`);
+    return await this.generateProceduralPapercraftFallback(params, outputPath);
   }
 
-  private async searchWikimediaArtwork(query: string, sceneIndex: number = 1): Promise<string | null> {
+  /**
+   * Ensures output image matches exact 1080x1920 vertical format for YouTube Shorts
+   */
+  private async ensureStandardResolution(imagePath: string): Promise<void> {
     try {
-      const cleanQuery = query.replace(/["'\n\r]/g, ' ').trim();
-      const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(cleanQuery)}&gsrlimit=15&prop=imageinfo&iiprop=url&iiurlwidth=1080&format=json`;
-
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'PaperTheaterWorldBot/1.0 (educational-shorts-bot)' },
-      });
-      if (!res.ok) return null;
-
-      const data = await res.json();
-      if (!data.query?.pages) return null;
-
-      const validUrls: string[] = [];
-      for (const pageId of Object.keys(data.query.pages)) {
-        const info = data.query.pages[pageId].imageinfo?.[0];
-        const imgUrl = info?.thumburl || info?.url || '';
-        const cleanPath = imgUrl.split('?')[0].toLowerCase();
-        if (
-          (cleanPath.endsWith('.jpg') || cleanPath.endsWith('.jpeg') || cleanPath.endsWith('.png')) &&
-          !cleanPath.includes('icon') &&
-          !cleanPath.includes('flag') &&
-          !cleanPath.includes('map') &&
-          !cleanPath.includes('logo') &&
-          !cleanPath.includes('coat_of_arms')
-        ) {
-          validUrls.push(imgUrl);
-        }
+      const tempPath = `${imagePath}.scaled.jpg`;
+      const cmd = `ffmpeg -y -i "${imagePath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -q:v 2 "${tempPath}"`;
+      await execAsync(cmd);
+      if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 2000) {
+        fs.renameSync(tempPath, imagePath);
       }
-
-      if (validUrls.length === 0) return null;
-      // Distribute across scenes
-      const selectedIndex = (sceneIndex - 1) % validUrls.length;
-      return validUrls[selectedIndex];
     } catch (e) {
-      return null;
+      // Non-fatal if scaling fails
     }
   }
 
-  private async generateDecorativeFallback(params: SceneImageParams, outputPath: string): Promise<string> {
-    const categoryLabel = params.category.toUpperCase().replace('_', ' ');
-    const sceneText = `SCENE ${params.sceneIndex}`;
-
-    const cmd = `ffmpeg -y -f lavfi -i color=c=0x1E1712:s=1080x1920:d=1 \
-      -vf "drawbox=x=40:y=40:w=1000:h=1840:color=0xD4AF37@0.8:t=8,drawbox=x=60:y=60:w=960:h=1800:color=0xD4AF37@0.4:t=3,drawtext=font='DejaVu Sans':text='PAPER THEATER WORLD':fontcolor=0xD4AF37:fontsize=52:x=(w-text_w)/2:y=700,drawtext=font='DejaVu Sans':text='${categoryLabel} • ${sceneText}':fontcolor=0xE5D0AC:fontsize=40:x=(w-text_w)/2:y=820" \
+  /**
+   * Generates a realistic layered paper diorama backdrop with texture and ambient shadows if AI offline
+   */
+  private async generateProceduralPapercraftFallback(params: SceneImageParams, outputPath: string): Promise<string> {
+    const cmd = `ffmpeg -y -f lavfi -i color=c=0xD5C4A1:s=1080x1920:d=1 \
+      -vf "drawbox=x=60:y=100:w=960:h=1720:color=0x3C3836@0.7:t=fill,drawbox=x=90:y=130:w=900:h=1660:color=0xFBF1C7@0.9:t=fill,drawbox=x=120:y=160:w=840:h=1600:color=0xEBDBB2@0.95:t=fill,noise=c1s=8:c0f=u" \
       -frames:v 1 "${outputPath}"`;
 
     try {
       await execAsync(cmd);
-      console.log(`[ImageProvider] Generated decorative diorama card at ${outputPath}`);
+      console.log(`[ImageProvider] Generated procedural papercraft backdrop at ${outputPath}`);
     } catch (err) {
-      const dummyJpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64');
+      const dummyJpeg = Buffer.from(
+        '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=',
+        'base64'
+      );
       fs.writeFileSync(outputPath, dummyJpeg);
     }
 

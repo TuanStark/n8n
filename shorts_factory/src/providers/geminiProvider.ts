@@ -39,6 +39,8 @@ export interface StoryboardOutput {
     sound_effects: string[];
     positive_prompt: string;
     negative_prompt: string;
+    video_prompt: string;
+    paper_asmr_cues: string[];
   }[];
 }
 
@@ -67,7 +69,7 @@ export class GeminiProvider {
       };
     }
 
-    const models = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', this.model, 'gemini-2.5-flash'];
+    const models = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
 
     for (const model of models) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
@@ -103,22 +105,43 @@ export class GeminiProvider {
 
   private safeJsonParse<T>(raw: string): T {
     let cleaned = raw.trim();
-    if (cleaned.startsWith('```json')) {
-      cleaned = cleaned.slice(7);
-    } else if (cleaned.startsWith('```')) {
-      cleaned = cleaned.slice(3);
+
+    // 1. Extract block between ```json ... ``` or ``` ... ``` if present
+    const matchBlock = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (matchBlock) {
+      cleaned = matchBlock[1].trim();
+    } else {
+      // 2. Otherwise find the outermost JSON structure { ... } or [ ... ]
+      const firstBrace = cleaned.indexOf('{');
+      const firstBracket = cleaned.indexOf('[');
+      let startIdx = -1;
+      if (firstBrace !== -1 && firstBracket !== -1) {
+        startIdx = Math.min(firstBrace, firstBracket);
+      } else {
+        startIdx = Math.max(firstBrace, firstBracket);
+      }
+
+      const lastBrace = cleaned.lastIndexOf('}');
+      const lastBracket = cleaned.lastIndexOf(']');
+      const endIdx = Math.max(lastBrace, lastBracket);
+
+      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        cleaned = cleaned.slice(startIdx, endIdx + 1).trim();
+      }
     }
-    if (cleaned.endsWith('```')) {
-      cleaned = cleaned.slice(0, -3);
-    }
-    cleaned = cleaned.trim();
 
     try {
       return JSON.parse(cleaned) as T;
     } catch (err) {
       // Fix bad escaped characters like \a, \(, \)
       const sanitized = cleaned.replace(/\\([^"\\/bfnrtu])/g, '$1');
-      return JSON.parse(sanitized) as T;
+      try {
+        return JSON.parse(sanitized) as T;
+      } catch (err2) {
+        // Strip trailing commas before } or ]
+        const noTrailingCommas = sanitized.replace(/,\s*([}\]])/g, '$1');
+        return JSON.parse(noTrailingCommas) as T;
+      }
     }
   }
 
@@ -197,42 +220,59 @@ Output JSON schema:
     script: ScriptOutput,
     styleProfile: { global_positive: string; global_negative: string }
   ): Promise<StoryboardOutput> {
-    const system = `You are a Master Diorama Art Director & Storyboard Artist for "Paper Theater World".
-Every scene takes place in a physical, miniature handcrafted paper theater diorama.
-Characters are textured paper cutouts with stop-motion brass brad joints.
-Lighting is theatrical diorama spotlight with soft paper cast shadows.
-Every visual prompt must incorporate the global paper craft style tokens.
-Split the script into 4–7 coherent scenes.
+    const system = `You are an Elite Editorial Art Director, Paper Engineer, Stop-Motion Designer, Motion Graphics Director, and Visual Storytelling Expert.
+Your job is to convert the YouTube Shorts narration into 4–6 high-budget handcrafted paper stop-motion scenes, matching premium editorial motion graphics (like Vox, Luxury Editorial, Apple Keynote).
+
+THINKING PROCESS FOR EVERY SCENE:
+1. What is the core message and visual metaphor of this narration segment?
+2. ONE HERO OBJECT: Dominates 70% of the composition (never compete with hero object).
+3. SUPPORTING OBJECTS: Maximum 2–3 supporting objects (20% of composition).
+4. BACKGROUND: Clean, minimal matching custom background (10% composition). Never crowded, generous negative space.
+5. NO RANDOM OBJECTS: Never add random arrows, circles, stars, icons, or decorations.
+6. PHYSICAL PAPER CRAFT RULES:
+   - Everything built entirely from thick cardstock, handmade paper, kraft paper, matte construction paper, watercolor paper, corrugated cardboard.
+   - Every object reveals 30–100 individually cut paper layers, visible cardstock thickness, laser-cut edges, paper fibers, stacked contour slices, recessed paper layers, handcrafted glue joints, deep shadow gaps.
+   - NEVER SHOW canvas, display board, poster, tabletop, frame. The entire world itself is made of layered paper.
+   - Lighting: Soft museum lighting, top-left directional light, deep ambient shadows between paper layers.
+
+MANDATORY IMAGE PROMPT (positive_prompt):
+Every scene's positive_prompt must describe Concept, Composition (70/20/10), Background, Color palette, and Lighting, and MUST END WITH this exact text:
+"Every object must appear physically handcrafted from individually cut paper pieces, with dramatic stacked cardstock layers, visible paper thickness, exposed cut edges, deep shadow separation, and realistic handcrafted paper textures. Every visible surface must reveal layer-after-layer paper construction. The composition must remain clean, minimal, and editorial with generous negative space. No flat surfaces. No digital illustration. No clutter. Premium handcrafted stop-motion paper aesthetic. Masterpiece. Ultra-detailed. 8K. No text. No logos. No watermark."
+
+UNIVERSAL VIDEO PROMPT (video_prompt):
+Every scene's video_prompt must specify:
+- Duration: 5–10 seconds.
+- Camera: Locked camera 100%. No zoom, pan, tilt, rotation, orbit, dolly, shake. Single continuous static shot.
+- 0–7 seconds (Layer-by-Layer Assembly): Background paper -> backdrop -> architecture/ground -> hero subject assembly -> supporting pieces. Each layer slides gently, drops naturally, tiny handcrafted paper bounce, casting realistic layered shadows.
+- 7–10 seconds (Living Paper Poster): Everything stays in original position. Only subtle stop-motion movement (micro-blinking, breathing, gentle hair/cloth flutter, paper shadows shift, tiny stop-motion jitter).
+- Audio ASMR Cues: Cardstock sliding, paper friction, soft taps, cardboard sounds, quiet studio ambience.
+
 Return strictly valid JSON.`;
 
-    const prompt = `Convert this script into 4-7 detailed visual scenes for Paper Theater diorama animation:
+    const prompt = `Deconstruct this historical script into 4-6 master paper stop-motion scenes:
 Script: "${script.full_script}"
 Duration: ${script.estimated_duration_sec}s
 Segments: ${JSON.stringify(script.narration_segments)}
 
-Global Style Positive tokens to blend into every positive_prompt:
-"${styleProfile.global_positive}"
-
-Global Negative tokens:
-"${styleProfile.global_negative}"
-
 Output JSON schema:
 {
   "total_scenes": 5,
-  "total_duration_sec": 35.0,
+  "total_duration_sec": 32.0,
   "scenes": [
     {
       "scene_index": 1,
       "duration_sec": 6.0,
       "narration_text": "text for this scene",
-      "visual_description": "detailed scene description",
-      "characters": ["character names with paper attire details"],
-      "location": "location diorama set",
-      "camera_movement": "slow_push_in | pan_left | fixed_proscenium",
-      "motion_style": "stop_motion_12fps",
-      "sound_effects": ["paper_rustle", "ambient_distant_trumpets"],
-      "positive_prompt": "prompt incorporating papercraft tokens and scene action",
-      "negative_prompt": "negative prompt tokens"
+      "visual_description": "dramatic editorial visual concept",
+      "characters": ["character names"],
+      "location": "paper theater diorama location",
+      "camera_movement": "locked_static_camera",
+      "motion_style": "handcrafted_stop_motion_12fps",
+      "sound_effects": ["paper_sliding", "cardstock_friction", "soft_paper_tap"],
+      "positive_prompt": "Complete cinematic image prompt ending with the mandatory papercraft ending suffix",
+      "negative_prompt": "(worst quality:1.4), photorealistic humans, 3d cgi render, glossy plastic, smooth digital painting, flat vector, cartoon, anime, canvas, poster board, tabletop, modern elements, watermark, logo, text",
+      "video_prompt": "Transform the provided image into a 10-second premium handcrafted stop-motion editorial paper-cut animation. Locked camera 100%. 0-7s: Layer-by-layer assembly... 7-10s: Living paper poster...",
+      "paper_asmr_cues": ["cardstock_slide", "paper_friction", "soft_tap"]
     }
   ]
 }`;
