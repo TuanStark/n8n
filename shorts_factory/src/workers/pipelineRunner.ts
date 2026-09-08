@@ -160,6 +160,7 @@ export class PipelineRunner {
           characters: sc.characters,
           location: sc.location,
           positivePrompt: sc.positive_prompt,
+          narrationText: sc.narration_text,  // Pass narration so image matches voiceover
         });
 
         sceneInputs.push({
@@ -187,8 +188,8 @@ export class PipelineRunner {
         [voiceResult.audioPath, voiceResult.fileSizeBytes, voiceResult.durationSec]
       );
 
-      // 6. Subtitles Generation (.ass)
-      console.log(`[Pipeline] Step 5: Building animated ASS subtitles...`);
+      // 6. Subtitles Generation (.ass) — generated for reference but NOT burned into video
+      console.log(`[Pipeline] Step 5: Building animated ASS subtitles (reference only, not burned)...`);
       let accumulatedSec = 0;
       const subtitleEvents = scriptData.narration_segments.map((seg) => {
         const start = accumulatedSec;
@@ -201,18 +202,18 @@ export class PipelineRunner {
         };
       });
 
-      const assPath = this.subtitleBuilder.generateAssFile(
+      this.subtitleBuilder.generateAssFile(
         subtitleEvents,
         `short_${topic.id}_subs`
       );
 
-      // 7. Video Rendering via FFmpeg
+      // 7. Video Rendering via FFmpeg — NO subtitles burned in
       console.log(`[Pipeline] Step 6: Rendering master 9:16 vertical short in FFmpeg...`);
       const renderRes = await this.ffmpeg.renderShort(
         topic.id,
         sceneInputs,
         voiceResult.audioPath,
-        assPath
+        undefined  // No subtitle overlay
       );
 
       // Save render job

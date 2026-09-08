@@ -144,4 +144,57 @@ export class YouTubePublisher {
       privacyStatus: metadataPayload.status.privacyStatus,
     };
   }
+
+  /**
+   * Set a YouTube video's privacy status to public (used after human approval)
+   */
+  async setVideoPublic(youtubeVideoId: string): Promise<void> {
+    if (!this.isConfigured()) {
+      throw new Error('[YouTubePublisher] YouTube credentials not configured.');
+    }
+
+    console.log(`[YouTubePublisher] Setting video ${youtubeVideoId} to PUBLIC...`);
+    const accessToken = await this.getFreshAccessToken();
+
+    // First get current video metadata
+    const getRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=status,snippet&id=${youtubeVideoId}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    const getData = await getRes.json();
+    if (!getRes.ok || !getData.items?.length) {
+      throw new Error(`[YouTubePublisher] Failed to get video info: ${JSON.stringify(getData)}`);
+    }
+
+    const video = getData.items[0];
+
+    // Update privacy to public
+    const updateRes = await fetch(
+      'https://www.googleapis.com/youtube/v3/videos?part=status',
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: youtubeVideoId,
+          status: {
+            privacyStatus: 'public',
+            selfDeclaredMadeForKids: false,
+          },
+        }),
+      }
+    );
+
+    if (!updateRes.ok) {
+      const err = await updateRes.text();
+      throw new Error(`[YouTubePublisher] Failed to set video public: ${err}`);
+    }
+
+    console.log(`[YouTubePublisher] ✅ Video ${youtubeVideoId} is now PUBLIC!`);
+  }
 }

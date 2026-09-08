@@ -131,23 +131,25 @@ export class FFmpegEngine {
 
         inputArgs.push('-loop', '1', '-t', sceneDuration.toFixed(2), '-i', scene.imagePath);
 
-        // Assign cinematic camera motion per scene index
+        // Diverse cinematic camera motions — each scene feels different
         let motionFilter: string;
-        if (i === 0) {
-          // Crane / Tilt Upwards
-          motionFilter = `scale=1200:2133,crop=1080:1920:x='(in_w-out_w)/2':y='(in_h-out_h)*(1-n/${totalFrames})'`;
-        } else if (i === 1) {
-          // Diagonal Glide
-          motionFilter = `scale=1200:2133,crop=1080:1920:x='(in_w-out_w)*(n/${totalFrames})':y='(in_h-out_h)*(0.3+0.4*n/${totalFrames})'`;
-        } else if (i === 2) {
-          // Smooth Push-in Zoom
-          motionFilter = `scale='1080*(1+0.08*n/${totalFrames})':'-1':eval=frame,crop=1080:1920`;
-        } else if (i === 3) {
-          // Pan from right to left & tilt
-          motionFilter = `scale=1200:2133,crop=1080:1920:x='(in_w-out_w)*(1-n/${totalFrames})':y='(in_h-out_h)*(1-n/${totalFrames})'`;
+        const scaleUp = 1350; // ~25% overscan for more dramatic movement
+        const scaleH = Math.round(scaleUp * (1920 / 1080));
+        if (i % 5 === 0) {
+          // Slow dramatic ZOOM INTO character face (center-weighted)
+          motionFilter = `scale='1080*(1+0.12*n/${totalFrames})':'-1':eval=frame,crop=1080:1920`;
+        } else if (i % 5 === 1) {
+          // Smooth HORIZONTAL PAN left-to-right
+          motionFilter = `scale=${scaleUp}:${scaleH},crop=1080:1920:x='(in_w-out_w)*(n/${totalFrames})':y='(in_h-out_h)/2'`;
+        } else if (i % 5 === 2) {
+          // VERTICAL TILT UP (reveal from bottom to top)
+          motionFilter = `scale=${scaleUp}:${scaleH},crop=1080:1920:x='(in_w-out_w)/2':y='(in_h-out_h)*(1-n/${totalFrames})'`;
+        } else if (i % 5 === 3) {
+          // DIAGONAL DRIFT (top-left to bottom-right) — cinematic slide
+          motionFilter = `scale=${scaleUp}:${scaleH},crop=1080:1920:x='(in_w-out_w)*(n/${totalFrames})':y='(in_h-out_h)*(n/${totalFrames})'`;
         } else {
-          // Slow dramatic zoom into hero
-          motionFilter = `scale='1080*(1+0.07*n/${totalFrames})':'-1':eval=frame,crop=1080:1920`;
+          // PULL-BACK zoom out (dramatic reveal)
+          motionFilter = `scale='1080*(1.12-0.12*n/${totalFrames})':'-1':eval=frame,crop=1080:1920`;
         }
 
         filterLines.push(`[${i}:v]${motionFilter},fps=${fps},setsar=1[v${i}]`);
@@ -168,14 +170,24 @@ export class FFmpegEngine {
         lastStream = outStream;
       }
 
-      // Add vignette and subtitles to final video stream
+      // Add cinematic color grading, soft vignette, letterbox, and subtitles
       let finalVideoNode = lastStream;
+      const colorGrading = [
+        'eq=contrast=1.08:brightness=0.02:saturation=1.15',  // Slight contrast + saturation boost
+        'colorbalance=rs=0.04:gs=0.01:bs=-0.03:rh=0.02:gh=0.0:bh=-0.02',  // Warm tone shift
+        'vignette=PI/3.5',  // Subtle vignette (softer than before)
+      ].join(',');
+
       if (subtitleAssPath && fs.existsSync(subtitleAssPath)) {
         const escapedAss = subtitleAssPath.replace(/\\/g, '/').replace(/:/g, '\\:');
-        filterLines.push(`[${lastStream}]vignette=PI/5,ass='${escapedAss}'[vout]`);
+        filterLines.push(
+          `[${lastStream}]${colorGrading},drawbox=y=0:w=iw:h=40:color=black@0.85:t=fill,drawbox=y=ih-40:w=iw:h=40:color=black@0.85:t=fill,ass='${escapedAss}'[vout]`
+        );
         finalVideoNode = 'vout';
       } else {
-        filterLines.push(`[${lastStream}]vignette=PI/5[vout]`);
+        filterLines.push(
+          `[${lastStream}]${colorGrading},drawbox=y=0:w=iw:h=40:color=black@0.85:t=fill,drawbox=y=ih-40:w=iw:h=40:color=black@0.85:t=fill[vout]`
+        );
         finalVideoNode = 'vout';
       }
 

@@ -27,6 +27,11 @@ export class AssSubtitleBuilder {
 
     const filePath = path.join(subtitleDir, `${filename}.ass`);
 
+    // Premium subtitle styles with modern typography:
+    // - Smaller font (52px) positioned in lower third
+    // - Soft shadow (no hard outline) for readability
+    // - Mixed case for natural reading
+    // - Semi-transparent dark background pill
     const header = `[Script Info]
 Title: Paper Theater World Shorts Subtitles
 ScriptType: v4.00+
@@ -37,19 +42,25 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: DioramaTitle,DejaVu Sans,68,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,1,5,4,2,60,60,420,1
-Style: DioramaHighlight,DejaVu Sans,72,&H0000FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,105,105,2,0,1,6,5,2,60,60,420,1
+Style: Default,Arial,52,&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,-1,0,0,0,100,100,1.5,0,3,2,0,2,80,80,320,1
+Style: Highlight,Arial,56,&H0000D4FF,&H000000FF,&H00000000,&HA0000000,-1,0,0,0,100,100,1.5,0,3,2,0,2,80,80,320,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
-    const dialogues = events.map((e) => {
-      const start = this.formatTimestamp(e.startSec);
-      const end = this.formatTimestamp(e.endSec);
-      const cleanText = e.text.replace(/\r?\n/g, ' ').toUpperCase();
-      return `Dialogue: 0,${start},${end},DioramaTitle,,0,0,0,,{\\b1\\an2}${cleanText}`;
-    }).join('\n');
+    const fadeInMs = 150;
+    const fadeOutMs = 100;
+
+    const dialogues = events
+      .map((e) => {
+        const start = this.formatTimestamp(e.startSec);
+        const end = this.formatTimestamp(e.endSec);
+        // Keep natural mixed case (no more ALL CAPS), add fade-in/out animation
+        const cleanText = e.text.replace(/\r?\n/g, ' ').trim();
+        return `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\fad(${fadeInMs},${fadeOutMs})\\b1}${cleanText}`;
+      })
+      .join('\n');
 
     fs.writeFileSync(filePath, header + dialogues, 'utf-8');
     return filePath;

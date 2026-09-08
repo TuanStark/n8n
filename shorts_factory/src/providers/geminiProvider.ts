@@ -220,59 +220,70 @@ Output JSON schema:
     script: ScriptOutput,
     styleProfile: { global_positive: string; global_negative: string }
   ): Promise<StoryboardOutput> {
-    const system = `You are an Elite Editorial Art Director, Paper Engineer, Stop-Motion Designer, Motion Graphics Director, and Visual Storytelling Expert.
-Your job is to convert the YouTube Shorts narration into 4–6 high-budget handcrafted paper stop-motion scenes, matching premium editorial motion graphics (like Vox, Luxury Editorial, Apple Keynote).
+    const system = `You are a Paper Theater Art Director. You create scenes for a YouTube Shorts channel that uses PAPER CUT SHADOW BOX DIORAMA style.
 
-THINKING PROCESS FOR EVERY SCENE:
-1. What is the core message and visual metaphor of this narration segment?
-2. ONE HERO OBJECT: Dominates 70% of the composition (never compete with hero object).
-3. SUPPORTING OBJECTS: Maximum 2–3 supporting objects (20% of composition).
-4. BACKGROUND: Clean, minimal matching custom background (10% composition). Never crowded, generous negative space.
-5. NO RANDOM OBJECTS: Never add random arrows, circles, stars, icons, or decorations.
-6. PHYSICAL PAPER CRAFT RULES:
-   - Everything built entirely from thick cardstock, handmade paper, kraft paper, matte construction paper, watercolor paper, corrugated cardboard.
-   - Every object reveals 30–100 individually cut paper layers, visible cardstock thickness, laser-cut edges, paper fibers, stacked contour slices, recessed paper layers, handcrafted glue joints, deep shadow gaps.
-   - NEVER SHOW canvas, display board, poster, tabletop, frame. The entire world itself is made of layered paper.
-   - Lighting: Soft museum lighting, top-left directional light, deep ambient shadows between paper layers.
+WHAT IS PAPER THEATER:
+- A miniature 3D scene inside a box/frame made entirely of layered cut paper
+- Characters are small paper figurines (NOT realistic humans)
+- Background, middle-ground, and foreground are separate paper layers creating depth
+- Warm light glows through the paper from behind
+- Everything looks handcrafted, delicate, and magical — like a tiny world in a box
+- Think of it as a tiny stage with paper puppets performing a scene
 
-MANDATORY IMAGE PROMPT (positive_prompt):
-Every scene's positive_prompt must describe Concept, Composition (70/20/10), Background, Color palette, and Lighting, and MUST END WITH this exact text:
-"Every object must appear physically handcrafted from individually cut paper pieces, with dramatic stacked cardstock layers, visible paper thickness, exposed cut edges, deep shadow separation, and realistic handcrafted paper textures. Every visible surface must reveal layer-after-layer paper construction. The composition must remain clean, minimal, and editorial with generous negative space. No flat surfaces. No digital illustration. No clutter. Premium handcrafted stop-motion paper aesthetic. Masterpiece. Ultra-detailed. 8K. No text. No logos. No watermark."
+MANDATORY RULES:
 
-UNIVERSAL VIDEO PROMPT (video_prompt):
-Every scene's video_prompt must specify:
-- Duration: 5–10 seconds.
-- Camera: Locked camera 100%. No zoom, pan, tilt, rotation, orbit, dolly, shake. Single continuous static shot.
-- 0–7 seconds (Layer-by-Layer Assembly): Background paper -> backdrop -> architecture/ground -> hero subject assembly -> supporting pieces. Each layer slides gently, drops naturally, tiny handcrafted paper bounce, casting realistic layered shadows.
-- 7–10 seconds (Living Paper Poster): Everything stays in original position. Only subtle stop-motion movement (micro-blinking, breathing, gentle hair/cloth flutter, paper shadows shift, tiny stop-motion jitter).
-- Audio ASMR Cues: Cardstock sliding, paper friction, soft taps, cardboard sounds, quiet studio ambience.
+1. NARRATION SYNC: The positive_prompt MUST visually depict EXACTLY what the narration_text is saying. If narration says "Caesar was stabbed", the image MUST show paper figurines of senators stabbing Caesar. NO DISCONNECTED IMAGERY.
+
+2. PAPER THEATER STYLE: Every prompt must describe paper craft elements:
+   - "tiny paper figurine of [character]" NOT "realistic [character]"
+   - "layered paper cut background of [location]" NOT just "[location]"
+   - "paper shadow box diorama frame" to ensure the box/frame is visible
+   - "warm backlight glowing through paper edges"
+
+3. SCENE VARIETY: Each scene must have different:
+   - Composition (wide establishing / medium / detail close-up)
+   - Color temperature (warm gold / cool blue / fiery red / soft purple)
+   - Mood lighting direction
+
+4. WELL-LIT: Characters must be clearly visible. No dark silhouettes.
+
+POSITIVE PROMPT FORMAT (follow exactly):
+"Paper theater shadow box diorama of [SCENE MATCHING NARRATION]. Tiny paper figurine of [character description] [action]. Layered paper cut [location] with [2-3 specific props]. [Color] warm backlight through paper edges. Handcrafted miniature paper art, visible paper texture and cut edges."
 
 Return strictly valid JSON.`;
 
-    const prompt = `Deconstruct this historical script into 4-6 master paper stop-motion scenes:
+    const prompt = `Create 5 paper theater diorama scenes. CRITICAL: Each scene's image MUST match its narration text exactly.
+
 Script: "${script.full_script}"
 Duration: ${script.estimated_duration_sec}s
 Segments: ${JSON.stringify(script.narration_segments)}
 
-Output JSON schema:
+RULES:
+- The positive_prompt describes what you SEE in the paper theater box
+- The narration_text is what the voiceover SAYS at that moment
+- They MUST describe the SAME event/moment
+- Every prompt must include "paper theater", "paper figurine", "shadow box", "paper cut layers"
+- Characters are PAPER FIGURINES, not real people
+
+Output JSON:
 {
   "total_scenes": 5,
   "total_duration_sec": 32.0,
   "scenes": [
     {
       "scene_index": 1,
-      "duration_sec": 6.0,
-      "narration_text": "text for this scene",
-      "visual_description": "dramatic editorial visual concept",
-      "characters": ["character names"],
-      "location": "paper theater diorama location",
+      "duration_sec": 6.5,
+      "narration_text": "exact narration text for this segment",
+      "visual_description": "Paper theater scene of [what narration describes]",
+      "characters": ["Character Name - paper figurine with specific clothes/colors"],
+      "location": "Paper cut layered [specific location]",
       "camera_movement": "locked_static_camera",
-      "motion_style": "handcrafted_stop_motion_12fps",
-      "sound_effects": ["paper_sliding", "cardstock_friction", "soft_paper_tap"],
-      "positive_prompt": "Complete cinematic image prompt ending with the mandatory papercraft ending suffix",
-      "negative_prompt": "(worst quality:1.4), photorealistic humans, 3d cgi render, glossy plastic, smooth digital painting, flat vector, cartoon, anime, canvas, poster board, tabletop, modern elements, watermark, logo, text",
-      "video_prompt": "Transform the provided image into a 10-second premium handcrafted stop-motion editorial paper-cut animation. Locked camera 100%. 0-7s: Layer-by-layer assembly... 7-10s: Living paper poster...",
-      "paper_asmr_cues": ["cardstock_slide", "paper_friction", "soft_tap"]
+      "motion_style": "smooth_cinematic",
+      "sound_effects": ["paper_sliding", "soft_ambient"],
+      "positive_prompt": "Paper theater shadow box diorama of [scene matching narration]. Tiny paper figurine of [character] [action]. Layered paper cut [location] with [props]. Warm golden backlight through paper edges. Handcrafted miniature paper art, visible paper texture.",
+      "negative_prompt": "photorealistic, real human, realistic skin, photograph, CGI, 3D render, digital art, cartoon, anime, text, watermark",
+      "video_prompt": "Smooth parallax camera through paper layers",
+      "paper_asmr_cues": ["paper_slide", "soft_tap"]
     }
   ]
 }`;
