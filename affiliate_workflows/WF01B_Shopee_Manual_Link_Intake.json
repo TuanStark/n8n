@@ -54,7 +54,7 @@
     },
     {
       "parameters": {
-        "command": "=echo '{{ $json.rawText.replace(/'/g, \"'\\\\''\") }}' > /home/node/.n8n/scratch_intake.txt && node /home/node/.n8n/affiliate_engine/orchestrator.js --import-file /home/node/.n8n/scratch_intake.txt"
+        "command": "=rm -f /home/node/.n8n/scratch_intake.txt 2>/dev/null; echo '{{ $json.rawText.replace(/'/g, \"'\\\\''\") }}' > /home/node/.n8n/scratch_intake.txt && node /home/node/.n8n/affiliate_engine/orchestrator.js --import-file /home/node/.n8n/scratch_intake.txt"
       },
       "id": "node-exec-intake",
       "name": "Run Manual Intake & AI Scorer",

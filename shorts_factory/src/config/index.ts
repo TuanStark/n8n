@@ -20,7 +20,7 @@ export const config = {
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || '',
-    model: 'gemini-3.8-flash',
+    model: 'gemini-3.5-flash',
   },
   elevenlabs: {
     apiKey: process.env.ELEVENLABS_API_KEY || '',

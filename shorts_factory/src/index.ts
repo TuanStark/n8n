@@ -17,8 +17,8 @@ const scheduler = new AutoScheduler(runner);
 const youtube = new YouTubePublisher();
 scheduler.start();
 
-// 1. Health check endpoint
-app.get('/health', async (req, res) => {
+// 1. Health check endpoint (accepts both GET and POST for testing)
+app.all('/health', async (req, res) => {
   try {
     const dbCheck = await pool.query('SELECT NOW() as db_time');
     res.json({
@@ -114,6 +114,10 @@ app.post('/api/approval/callback', async (req, res) => {
         console.warn(`[API] No YouTube video found for topic ${topicId}`);
         return res.json({ success: true, action, status: 'NO_VIDEO_FOUND' });
       }
+    } else if (action === 'REGENERATE' && topicId) {
+      await pool.query("UPDATE topics SET status = 'IDEA' WHERE id = $1", [topicId]);
+      console.log(`[API] Video for topic ${topicId} reset to IDEA for regeneration.`);
+      return res.json({ success: true, action: 'REGENERATED' });
     } else if (action === 'DISCARD' && topicId) {
       await pool.query("UPDATE topics SET status = 'DISCARDED' WHERE id = $1", [topicId]);
       console.log(`[API] Video for topic ${topicId} discarded.`);

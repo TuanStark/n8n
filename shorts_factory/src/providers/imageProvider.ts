@@ -31,16 +31,16 @@ const CATEGORY_PALETTES: Record<string, string> = {
 
 /**
  * The style anchor — placed FIRST in prompt so AI models prioritize this style.
- * Pollinations/Flux pays most attention to the beginning of the prompt.
+ * Adheres strictly to the Master Editorial Paper Stop-Motion standard.
  */
 const STYLE_ANCHOR =
-  'Paper theater diorama, multi-layered paper cut shadow box with 5 depth layers, handcrafted miniature paper figures, visible paper texture and cut edges, warm golden backlight glowing through paper layers, soft spotlight, tiny paper craft characters';
+  'layered papercraft art, authentic paper theater, crafted entirely from stacked cut-out cardstock layers, precision laser-cut paper edges, physical relief, tangible paper thickness, deep drop shadows between paper layers, raw paper fibers and paper texture, top-down relief on textured cardstock background, dramatic museum directional lighting, cinematic paper stop-motion aesthetic, clean composition with generous negative space, no frames, no pedestals';
 
 /**
- * Strong negative prompt to block common failure modes
+ * Strong negative prompt to block pedestals, plinths, flat illustration, 3D CGI, cartoons, frames, and anime
  */
 const NEGATIVE_PROMPT =
-  'photorealistic, real photograph, real human skin, realistic face, CGI, 3D render, glossy, plastic, digital painting, oil painting, watercolor, cartoon, anime, abstract, glass, crystal, modern, text, watermark, logo';
+  'pedestal, plinth, stand, base, wooden stand, display stand, platform, tabletop, desk surface, cutting mat, floor, cartoon, anime, manga, 3d cgi render, glossy plastic, flat vector, digital painting, smooth airbrush, photorealistic human skin, photograph, frame, border, outer box, display box, diorama box, poster, canvas, modern elements, text, watermark, logo, blurry, cluttered, noisy background';
 
 export class ImageProvider {
   private rawStorageDir: string;
@@ -53,33 +53,29 @@ export class ImageProvider {
   }
 
   /**
-   * Builds a prompt with STYLE FIRST, then scene content that matches narration.
-   * This ensures Pollinations/Flux generates paper theater style AND matches the voiceover.
+   * Constructs the full image prompt by merging scene-specific details with the master style anchor.
+   * Places the Hero Subject FIRST so diffusion models anchor on the visual metaphor immediately.
    */
-  private buildScenePrompt(params: SceneImageParams): string {
+  buildScenePrompt(params: SceneImageParams): string {
     const palette = CATEGORY_PALETTES[params.category] || CATEGORY_PALETTES.ancient_rome;
 
     // Extract the core scene description
     let sceneContent = (params.positivePrompt || params.visualDescription || '').trim();
 
     if (!sceneContent) {
-      const charStr = params.characters?.length ? params.characters.join(' and ') : 'a historical figure';
+      const charStr = params.characters?.length ? params.characters.join(' and ') : 'a historical hero';
       const locStr = params.location || 'an ancient setting';
       sceneContent = `${charStr} in ${locStr}`;
     }
 
     // If narration text is available, weave it into the prompt for content matching
     let narrationHint = '';
-    if (params.narrationText) {
-      // Extract key nouns/actions from narration to ensure visual matches voiceover
-      narrationHint = ` depicting the moment: "${params.narrationText.slice(0, 120)}"`;
+    if (params.narrationText && !sceneContent.toLowerCase().includes(params.narrationText.slice(0, 30).toLowerCase())) {
+      narrationHint = ` Visual concept for moment: "${params.narrationText.slice(0, 100)}".`;
     }
 
-    // CRITICAL: Style goes FIRST so Pollinations/Flux prioritizes paper theater look
-    // Then scene content so it matches the narration
-    const prompt = `${STYLE_ANCHOR}, ${palette}, ${sceneContent}${narrationHint}. No text, no watermark.`;
-
-    return prompt;
+    // Hero Object & Metaphor FIRST so diffusion models anchor on the subject immediately
+    return `still life layered papercraft art of ${sceneContent}. ${STYLE_ANCHOR}, ${palette} color palette.${narrationHint} Every object must appear physically handcrafted from individually cut paper pieces with visible cardstock thickness and shadow separation. Masterpiece, 8K, no text, no watermark, no pedestal.`;
   }
 
   /**
@@ -133,7 +129,7 @@ export class ImageProvider {
             {
               parts: [
                 {
-                  text: `Generate a vertical 9:16 aspect ratio image of the following scene. The image must clearly show recognizable characters and a specific location. Do NOT create abstract art.\n\nScene: ${prompt}\n\nIMPORTANT: Show clear, recognizable paper-cut characters with visible faces, clothing details, and body poses. The scene must tell a story visually.`,
+                  text: `Generate a vertical 9:16 aspect ratio image of this premium handcrafted editorial paper sculpture.\nStyle: Authentic physical paper-cut sculpture with 30-100 stacked cardstock contour layers, deep shadow gaps between layers, visible paper thickness, raw paper fibers, and soft top-left museum lighting.\nComposition: Clean, minimal editorial composition featuring ONE dominant Hero Object (70% of frame), minimal background with generous negative space.\nABSOLUTELY FORBIDDEN: Do NOT draw a frame, outer border, display box, tabletop, or cartoonish drawings. The entire image must be the paper craft world itself.\n\nScene details: ${prompt}`,
                 },
               ],
             },
@@ -199,8 +195,9 @@ export class ImageProvider {
           console.log(`[ImageProvider] Trying Pollinations (model: ${model}, round ${round + 1})...`);
 
           const seed = Math.floor(Math.random() * 9999999);
-          const encodedPrompt = encodeURIComponent(prompt);
-          const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1792&model=${model}&nologo=true&seed=${seed}`;
+          const encodedPrompt = encodeURIComponent(prompt.slice(0, 1800));
+          const encodedNegative = encodeURIComponent(NEGATIVE_PROMPT);
+          const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1792&model=${model}&nologo=true&seed=${seed}&negative=${encodedNegative}`;
 
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout

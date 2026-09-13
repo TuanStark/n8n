@@ -11,6 +11,7 @@ export interface ResearchOutput {
 }
 
 export interface ScriptOutput {
+  hook_headline?: string;
   hook_text: string;
   full_script: string;
   estimated_duration_sec: number;
@@ -69,7 +70,7 @@ export class GeminiProvider {
       };
     }
 
-    const models = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
+    const models = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
 
     for (const model of models) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
@@ -169,45 +170,69 @@ Output JSON schema:
     return this.safeJsonParse<ResearchOutput>(raw);
   }
 
-  async generateShortsScript(title: string, research: ResearchOutput, targetDurationSec = 35): Promise<ScriptOutput> {
-    const system = `You are a World-Class YouTube Shorts Scriptwriter for a top-tier international history channel ("Paper Theater World") targeting native English audiences (US, UK, Canada, Australia).
-Audience: Skeptical, fast-scrolling, intelligent viewers aged 18–35 who love history, dark psychological twists, and tactical grit.
+  async generateShortsScript(title: string, research: ResearchOutput, targetDurationSec = 34): Promise<ScriptOutput> {
+    const system = `You are an Elite YouTube Shorts Scriptwriter and Retention Strategist directing scripts for the premier historical channel ("Paper Theater World").
+Audience: Skeptical, lightning-fast scrollers aged 18–35 (US, UK, Canada, Australia) who crave gritty historical psychology, high tactical tension, and counter-intuitive truths.
 
-STRICT TIER-1 VIRALITY RULES:
-1. THE 2-SECOND RULE: The first sentence MUST be an explosive pattern interrupt or contrarian truth.
-   - BANNED: "Did you know", "In ancient Rome", "Have you ever wondered", "Meet Julius Caesar", "Imagine", "This is the story".
-   - REQUIRED: Immediate cold open with visceral conflict or cognitive dissonance (e.g., "Everything you were taught about Sparta is a lie.").
-2. PACING & CADENCE:
-   - High information density: 80–100 words total (target duration 30–35s).
-   - Short, punchy, active verbs. Eliminate all filler adjectives and passive voice.
-   - Rhythm: BBC Documentary meets high-tension thriller (Dan Carlin style).
-3. 5-PHASE NARRATIVE ARC:
-   - Phase 1: HOOK (0–3s): Shocking contrarian statement.
-   - Phase 2: THE TRAP (3–10s): The brutal reality / impossible dilemma.
-   - Phase 3: THE GAMBLE (10–20s): The desperate, audacious move.
-   - Phase 4: THE TWIST (20–28s): The unexpected historical truth.
-   - Phase 5: SEAMLESS LOOP & COMMENT BAIT (28–34s): End on a sharp moral dilemma or provocative question that seamlessly connects back to the opening hook for infinite replays, while driving fierce debates in the comment section.
+MASTER 20-SECOND RETENTION HOOK ARCHITECTURE (THE RAPID-FIRE LOCK-IN):
+Research shows 70% of viewers drop off before second 20 if the hook is weak, pacing is slow, or clickbait is empty. To dominate retention:
+- Pacing must be RAPID: 7 to 8 short narration segments (2.0 to 4.5 seconds each), NEVER staying on one visual for more than 4 seconds!
+- Divide the 0–20s window into 5 crisp, accelerating beats:
+
+1. TIER 1: THE DISRUPTOR (0–2.8s) - PATTERN INTERRUPT
+   - Shatter expectations or expose cognitive dissonance in the first sentence.
+   - FORBIDDEN BANNED CLICHÉS: "Did you know", "In ancient Rome/Egypt", "Have you ever wondered", "Meet [Name]", "Imagine", "This is the story of", "History tells us".
+   - REQUIRED: Cold open plunged into visceral conflict or an inverted common myth.
+   - HOOK HEADLINE: Generate a punchy 3-5 word ALL-CAPS headline for the on-screen papercraft banner (e.g., "ROME'S DEADLIEST WEAPON", "THE FORBIDDEN POISON", "MURDER OF A GOD-KING").
+
+2. TIER 2: THE AGONY & HIGH STAKES (2.8–5.5s) - EMOTIONAL TENSION
+   - Escalate stakes immediately. What was on the brink of total annihilation, public execution, or empire-wide collapse? Show the lethal trap.
+
+3. TIER 3: THE POINT OF NO RETURN (5.5–8.5s) - THE DANGEROUS CHOICE
+   - The desperate decision made in the shadows. No turning back.
+
+4. TIER 4: THE FORBIDDEN SECRET (8.5–13.0s) - THE CURIOSITY LOCK
+   - The bizarre tactical secret or unexplainable method that forces the viewer to keep watching.
+
+5. TIER 5: THE TACTICAL EXECUTION (13.0–18.0s) - THE INVISIBLE STRIKE
+   - Sensory, tactile details of how the fatal act was committed.
+
+6. TIER 6: THE VISCERAL CLIMAX (18.0–23.0s) - THE SHOCKING PAYOFF
+   - High information density, concrete nouns, and active verbs. The historic revelation.
+
+7. TIER 7: THE GRIM AFTERMATH (23.0–28.0s) - THE CRUEL IRONY
+   - The twist of fate or brutal price paid.
+
+8. TIER 8: THE SEAMLESS INFINITE LOOP (28.0–34.0s) - ALGORITHM CATALYST
+   - Connect grammatically or conceptually back to the 1st second, creating an addictive infinite replay loop that boosts the algorithm.
+
+CADENCE & WORD COUNT:
+- Total words: 85–100 spoken words (~150-160 WPM, duration 32–34s).
+- Must output EXACTLY 7 or 8 narration segments.
 
 Return strictly valid JSON.`;
 
-    const prompt = `Generate a viral YouTube Shorts script for topic: "${title}".
+    const prompt = `Generate a master viral YouTube Shorts script for historical topic: "${title}".
 Target duration: ${targetDurationSec} seconds.
 Research Data:
 ${JSON.stringify(research, null, 2)}
 
 Output JSON schema:
 {
-  "hook_text": "string (the punchy 1st sentence)",
-  "full_script": "string (complete spoken narration)",
-  "estimated_duration_sec": 35.0,
-  "hook_score": 9.2,
+  "hook_headline": "3-5 WORDS ALL-CAPS FOR SCREEN BANNER",
+  "hook_text": "string (the punchy Tier-1 opening sentence)",
+  "full_script": "string (complete spoken narration, 85-100 words)",
+  "estimated_duration_sec": 33.5,
+  "hook_score": 9.8,
   "narration_segments": [
-    {
-      "segment_index": 1,
-      "text": "sentence 1",
-      "estimated_sec": 5.0,
-      "visual_intent": "visual scene intent"
-    }
+    { "segment_index": 1, "text": "Tier 1: Disruptor sentence (0-2.8s)", "estimated_sec": 2.8, "visual_intent": "Explosive hero visual" },
+    { "segment_index": 2, "text": "Tier 2: High stakes sentence (2.8-5.5s)", "estimated_sec": 2.7, "visual_intent": "Tension and stakes escalation" },
+    { "segment_index": 3, "text": "Tier 3: Point of no return (5.5-8.5s)", "estimated_sec": 3.0, "visual_intent": "Dangerous shadow choice" },
+    { "segment_index": 4, "text": "Tier 4: Forbidden secret (8.5-13.0s)", "estimated_sec": 4.5, "visual_intent": "The central mystery visual" },
+    { "segment_index": 5, "text": "Tier 5: Tactical execution (13.0-18.0s)", "estimated_sec": 5.0, "visual_intent": "Tactile assassination act" },
+    { "segment_index": 6, "text": "Tier 6: Visceral climax (18.0-23.0s)", "estimated_sec": 5.0, "visual_intent": "Fatal consequence" },
+    { "segment_index": 7, "text": "Tier 7: Grim aftermath (23.0-28.0s)", "estimated_sec": 5.0, "visual_intent": "Irony of fate" },
+    { "segment_index": 8, "text": "Tier 8: Infinite loop closing (28.0-33.5s)", "estimated_sec": 5.5, "visual_intent": "Closing paradox connecting to second 1" }
   ],
   "facts_used": ["fact 1", "fact 2"]
 }`;
@@ -220,70 +245,69 @@ Output JSON schema:
     script: ScriptOutput,
     styleProfile: { global_positive: string; global_negative: string }
   ): Promise<StoryboardOutput> {
-    const system = `You are a Paper Theater Art Director. You create scenes for a YouTube Shorts channel that uses PAPER CUT SHADOW BOX DIORAMA style.
+    const system = `You are an Elite Editorial Art Director, Paper Engineer, Stop-Motion Designer, and Visual Storytelling Director for high-budget handcrafted paper stop-motion historical Shorts ("Paper Theater World").
 
-WHAT IS PAPER THEATER:
-- A miniature 3D scene inside a box/frame made entirely of layered cut paper
-- Characters are small paper figurines (NOT realistic humans)
-- Background, middle-ground, and foreground are separate paper layers creating depth
-- Warm light glows through the paper from behind
-- Everything looks handcrafted, delicate, and magical — like a tiny world in a box
-- Think of it as a tiny stage with paper puppets performing a scene
+MISSION:
+Convert each narration segment into a breathtaking, museum-quality handcrafted paper sculpture scene.
+Create EXACTLY ${script.narration_segments.length} scenes corresponding 1-to-1 with the narration segments.
 
-MANDATORY RULES:
+THINKING PROCESS & CORE PHILOSOPHY:
+- Never visualize every word literally. Visualize the CORE IDEA and striking VISUAL METAPHOR.
+- Think like a Paper Engineer constructing physical art from 500 sheets of cardstock, NOT a 2D digital illustrator.
+- Pacing is RAPID: Each scene lasts 2.0s to 4.5s. Quick, captivating visual cuts!
 
-1. NARRATION SYNC: The positive_prompt MUST visually depict EXACTLY what the narration_text is saying. If narration says "Caesar was stabbed", the image MUST show paper figurines of senators stabbing Caesar. NO DISCONNECTED IMAGERY.
+STRICT COMPOSITION RULE (THE 70/20/10 RULE):
+1. 70% ONE HERO OBJECT: Every scene must feature ONE dominant, unforgettable hero paper sculpture (e.g. A massive shattered Spartan hoplite shield revealing a hidden iron dagger; an Imperial Roman laurel crown made of decaying cardstock; a towering paper guillotine slicing parchment). Never compete with the hero object.
+2. 20% SUPPORTING OBJECTS: Maximum 2–3 supporting objects that add narrative meaning. Nothing random, no decorative clutter.
+3. 10% BACKGROUND & GENEROUS NEGATIVE SPACE: Custom thematic background with large clean breathing room.
 
-2. PAPER THEATER STYLE: Every prompt must describe paper craft elements:
-   - "tiny paper figurine of [character]" NOT "realistic [character]"
-   - "layered paper cut background of [location]" NOT just "[location]"
-   - "paper shadow box diorama frame" to ensure the box/frame is visible
-   - "warm backlight glowing through paper edges"
+PAPER CONSTRUCTION RULES (MUST REVEAL IN EVERY SCENE):
+- Every visible object must reveal: 30–100 individually cut paper layers, visible cardstock thickness, laser-cut edges, raw paper fibers, stacked contour slices, recessed paper layers, handcrafted glue joints, and deep shadow gaps between layers.
+- Materials: thick cardstock, handmade paper, kraft paper, matte construction paper, watercolor paper.
+- ABSOLUTELY FORBIDDEN: NEVER show a canvas, display board, poster, tabletop, outer box frame, or picture frame. The ENTIRE WORLD itself must be made from paper.
+- LIGHTING: Soft museum lighting, top-left directional spotlight casting deep dimensional ambient shadows between paper layers to emphasize relief depth.
 
-3. SCENE VARIETY: Each scene must have different:
-   - Composition (wide establishing / medium / detail close-up)
-   - Color temperature (warm gold / cool blue / fiery red / soft purple)
-   - Mood lighting direction
+POSITIVE PROMPT FORMAT (MUST FOLLOW THIS EXACT STRUCTURE AND END WITH THIS SIGNATURE):
+"[HERO OBJECT DESCRIPTION with 30-100 stacked cut paper layers and visual metaphor]. [2-3 SUPPORTING OBJECTS with paper construction details]. [MINIMAL BACKGROUND with generous negative space]. [LIGHTING & PALETTE: Top-left directional light, deep dimensional shadows]. Every object must appear physically handcrafted from individually cut paper pieces, with dramatic stacked cardstock layers, visible paper thickness, exposed cut edges, deep shadow separation, and realistic handcrafted paper textures. Every visible surface must reveal layer-after-layer paper construction. The composition must remain clean, minimal, and editorial with generous negative space. No flat surfaces. No digital illustration. No clutter. Premium handcrafted stop-motion paper aesthetic. Masterpiece. Ultra-detailed. 8K. No text. No logos. No watermark."
 
-4. WELL-LIT: Characters must be clearly visible. No dark silhouettes.
+NEGATIVE PROMPT:
+"cartoon, anime, 3d cgi render, glossy plastic, flat vector, digital painting, smooth airbrush, photorealistic human skin, photograph, frame, border, outer box, display box, tabletop, text, watermark, logo, blurry, cluttered, noisy background"
 
-POSITIVE PROMPT FORMAT (follow exactly):
-"Paper theater shadow box diorama of [SCENE MATCHING NARRATION]. Tiny paper figurine of [character description] [action]. Layered paper cut [location] with [2-3 specific props]. [Color] warm backlight through paper edges. Handcrafted miniature paper art, visible paper texture and cut edges."
+Return strictly valid JSON matching the requested schema.`;
 
-Return strictly valid JSON.`;
-
-    const prompt = `Create 5 paper theater diorama scenes. CRITICAL: Each scene's image MUST match its narration text exactly.
-
+    const prompt = `Create exactly ${script.narration_segments.length} master handcrafted paper stop-motion scenes for this historical script.
+Hook Headline: "${script.hook_headline || ''}"
 Script: "${script.full_script}"
 Duration: ${script.estimated_duration_sec}s
 Segments: ${JSON.stringify(script.narration_segments)}
 
-RULES:
-- The positive_prompt describes what you SEE in the paper theater box
-- The narration_text is what the voiceover SAYS at that moment
-- They MUST describe the SAME event/moment
-- Every prompt must include "paper theater", "paper figurine", "shadow box", "paper cut layers"
-- Characters are PAPER FIGURINES, not real people
+CRITICAL REQUIREMENTS:
+- Create EXACTLY ${script.narration_segments.length} scenes (matching each segment index 1 to ${script.narration_segments.length}).
+- Each scene must have ONE clear Hero Object (70% of frame) representing the visual metaphor of that segment.
+- Avoid clutter: maximum 2-3 supporting paper objects, large clean negative space.
+- Specify paper engineering: stacked cardstock layers, laser-cut edges, kraft/construction paper textures, deep shadow gaps.
+- Absolutely NO outer frames, NO display boxes, NO tabletop borders.
+- The positive_prompt must end with the required signature.
 
 Output JSON:
 {
-  "total_scenes": 5,
-  "total_duration_sec": 32.0,
+  "total_scenes": ${script.narration_segments.length},
+  "total_duration_sec": ${script.estimated_duration_sec},
   "scenes": [
     {
       "scene_index": 1,
-      "duration_sec": 6.5,
-      "narration_text": "exact narration text for this segment",
-      "visual_description": "Paper theater scene of [what narration describes]",
-      "characters": ["Character Name - paper figurine with specific clothes/colors"],
-      "location": "Paper cut layered [specific location]",
-      "camera_movement": "locked_static_camera",
-      "motion_style": "smooth_cinematic",
-      "sound_effects": ["paper_sliding", "soft_ambient"],
-      "positive_prompt": "Paper theater shadow box diorama of [scene matching narration]. Tiny paper figurine of [character] [action]. Layered paper cut [location] with [props]. Warm golden backlight through paper edges. Handcrafted miniature paper art, visible paper texture.",
-      "negative_prompt": "photorealistic, real human, realistic skin, photograph, CGI, 3D render, digital art, cartoon, anime, text, watermark",
-      "video_prompt": "Smooth parallax camera through paper layers",
-      "paper_asmr_cues": ["paper_slide", "soft_tap"]
+      "duration_sec": 2.8,
+      "narration_text": "narration text for segment 1",
+      "visual_description": "Handcrafted layered cardstock sculpture of [Hero Object metaphor]",
+      "characters": ["Hero Subject details"],
+      "location": "Layered cardstock location with negative space",
+      "camera_movement": "stepped_stop_motion_push_in",
+      "motion_style": "tangible_stop_motion_12fps",
+      "sound_effects": ["cinematic_sub_bass_boom", "paper_friction"],
+      "positive_prompt": "Handcrafted paper sculpture of [Hero Object with 40-60 stacked paper layers, visible cardstock thickness and laser-cut edges]. [2 supporting paper elements]. Layered paper background with generous clean negative space. Top-left museum lighting with deep ambient shadows between paper layers. Every object must appear physically handcrafted from individually cut paper pieces, with dramatic stacked cardstock layers, visible paper thickness, exposed cut edges, deep shadow separation, and realistic handcrafted paper textures. Every visible surface must reveal layer-after-layer paper construction. The composition must remain clean, minimal, and editorial with generous negative space. No flat surfaces. No digital illustration. No clutter. Premium handcrafted stop-motion paper aesthetic. Masterpiece. Ultra-detailed. 8K. No text. No logos. No watermark.",
+      "negative_prompt": "cartoon, anime, 3d cgi render, glossy plastic, flat vector, digital painting, smooth airbrush, photorealistic human skin, photograph, frame, border, outer box, display box, tabletop, text, watermark, logo, blurry, cluttered, noisy background",
+      "video_prompt": "Handcrafted stop-motion paper-cut animation at 12fps cadence.",
+      "paper_asmr_cues": ["cardstock_slide", "paper_friction"]
     }
   ]
 }`;

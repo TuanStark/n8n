@@ -1,5 +1,5 @@
 {
-  "name": "STARK — Slack Interactivity Handler",
+  "name": "STARK \u2014 Slack Interactivity Handler",
   "id": "stark-slack-interactivity",
   "nodes": [
     {
@@ -13,7 +13,10 @@
       "name": "Slack Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [100, 300],
+      "position": [
+        100,
+        300
+      ],
       "webhookId": "slack-stark-interactivity"
     },
     {
@@ -27,17 +30,23 @@
       "name": "Respond 200 to Slack",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [320, 160]
+      "position": [
+        320,
+        160
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// ── Parse Slack Interactive Payload ─────────────────────────────────────\nconst rawBody = $input.first().json.body;\nlet slackPayload;\n\nif (typeof rawBody === 'string') {\n  const decoded = decodeURIComponent(rawBody.replace(/^payload=/, ''));\n  slackPayload = JSON.parse(decoded);\n} else if (rawBody && rawBody.payload) {\n  slackPayload = typeof rawBody.payload === 'string'\n    ? JSON.parse(rawBody.payload)\n    : rawBody.payload;\n} else {\n  slackPayload = rawBody || {};\n}\n\nconst action = slackPayload.actions?.[0] || {};\nconst actionId = action.action_id || 'unknown';\nconst actionValue = action.value || '{}';\nconst responseUrl = slackPayload.response_url;\nconst userName = slackPayload.user?.name || slackPayload.user?.username || 'Bạn';\nconst userId = slackPayload.user?.id || 'U_UNKNOWN';\n\nlet parsedValue = {};\ntry { parsedValue = JSON.parse(actionValue); } catch(e) {}\n\nlet replyMessage = `✅ Đã ghi nhận thao tác của @${userName}`;\nlet dbQuery = '';\nlet triggerCampaignWebhook = false;\nlet publishToFacebook = false;\nlet campaignId = parsedValue.campaign_id || null;\nlet targetOpportunityId = parsedValue.opportunity_id || null;\nlet directPostContent = parsedValue.post_content || '';\n\nif (actionId === 'skip') {\n  replyMessage = `⏭️ *Đã bỏ qua bài viết này.* — bởi @${userName}`;\n} else if (actionId === 'approve_ad_campaign') {\n  const campName = parsedValue.name || 'Bài viết Marketing';\n  replyMessage = `🚀 *ĐÃ DUYỆT & ĐANG TỰ ĐỘNG ĐĂNG BÀI LÊN FACEBOOK:* [${campName}]\\n> 👤 *Phê duyệt bởi:* @${userName} vào lúc ${new Date().toLocaleTimeString('vi-VN')}`;\n  publishToFacebook = true;\n  if (campaignId) {\n    dbQuery = `UPDATE campaigns SET status = 'PUBLISHED', approved_by = '${userName}', approved_at = CURRENT_TIMESTAMP WHERE id = '${campaignId}';`;\n  }\n} else if (actionId === 'reject_ad_campaign') {\n  const campName = parsedValue.name || 'Bài viết Marketing';\n  replyMessage = `❌ *ĐÃ TỪ CHỐI BÀI VIẾT:* [${campName}] — bởi @${userName}`;\n  if (campaignId) {\n    dbQuery = `UPDATE campaigns SET status = 'REJECTED' WHERE id = '${campaignId}';`;\n  }\n} else if (actionId === 'claim_lead') {\n  replyMessage = `🤝 *Lead đã được nhận phụ trách bởi:* @${userName}`;\n} else if (actionId === 'book_meeting') {\n  replyMessage = `📅 *Đã chuyển trạng thái Đặt lịch tư vấn (Book Meeting) bởi:* @${userName}`;\n} else if (actionId === 'create_campaign_for_opportunity' || actionId === 'create_content_for_opportunity') {\n  replyMessage = `⚡ *Đang tạo Bài viết Marketing & Đề xuất Chiến dịch cho Cơ hội này...* (Yêu cầu bởi @${userName})`;\n  triggerCampaignWebhook = true;\n}\n\nreturn [{\n  json: {\n    action_id: actionId,\n    response_url: responseUrl,\n    user_name: userName,\n    user_id: userId,\n    reply_message: replyMessage,\n    db_query: dbQuery,\n    parsed_value: parsedValue,\n    trigger_campaign_webhook: triggerCampaignWebhook,\n    publish_to_facebook: publishToFacebook,\n    campaign_id: campaignId,\n    direct_post_content: directPostContent,\n    opportunity_id: targetOpportunityId\n  }\n}];"
+        "jsCode": "// \u2500\u2500 Parse Slack Interactive Payload \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst rawBody = $input.first().json.body;\nlet slackPayload;\n\nif (typeof rawBody === 'string') {\n  const decoded = decodeURIComponent(rawBody.replace(/^payload=/, ''));\n  slackPayload = JSON.parse(decoded);\n} else if (rawBody && rawBody.payload) {\n  slackPayload = typeof rawBody.payload === 'string'\n    ? JSON.parse(rawBody.payload)\n    : rawBody.payload;\n} else {\n  slackPayload = rawBody || {};\n}\n\nconst action = slackPayload.actions?.[0] || {};\nconst actionId = action.action_id || 'unknown';\nconst actionValue = action.value || '{}';\nconst responseUrl = slackPayload.response_url;\nconst userName = slackPayload.user?.name || slackPayload.user?.username || 'B\u1ea1n';\nconst userId = slackPayload.user?.id || 'U_UNKNOWN';\n\nlet parsedValue = {};\ntry { parsedValue = JSON.parse(actionValue); } catch(e) {}\n\nlet replyMessage = `\u2705 \u0110\u00e3 ghi nh\u1eadn thao t\u00e1c c\u1ee7a @${userName}`;\nlet dbQuery = '';\nlet triggerCampaignWebhook = false;\nlet publishToFacebook = false;\nlet triggerShortApproval = false;\nlet shortId = parsedValue.shortId || null;\nlet shortAction = parsedValue.action || null;\nlet campaignId = parsedValue.campaign_id || null;\nlet targetOpportunityId = parsedValue.opportunity_id || null;\nlet directPostContent = parsedValue.post_content || '';\n\nif (actionId === 'approve_short') {\n  shortAction = 'APPROVE';\n  triggerShortApproval = true;\n  replyMessage = `\ud83d\ude80 *\u0110\u00c3 DUY\u1ec6T & \u0110ANG T\u1ef0 \u0110\u1ed8NG C\u00d4NG KHAI VIDEO L\u00caN YOUTUBE...*\\n> \ud83d\udc64 *Ph\u00ea duy\u1ec7t b\u1edfi:* @${userName} v\u00e0o l\u00fac ${new Date().toLocaleTimeString('vi-VN')}`;\n} else if (actionId === 'discard_short') {\n  shortAction = 'DISCARD';\n  triggerShortApproval = true;\n  replyMessage = `\ud83d\uddd1\ufe0f *\u0110\u00c3 H\u1ee6Y B\u1ece VIDEO N\u00c0Y.* \u2014 b\u1edfi @${userName}`;\n} else if (actionId === 'regenerate_short') {\n  shortAction = 'REGENERATE';\n  triggerShortApproval = true;\n  replyMessage = `\ud83d\udd04 *\u0110ANG Y\u00caU C\u1ea6U T\u1ea0O L\u1ea0I VIDEO...* \u2014 b\u1edfi @${userName}`;\n} else if (actionId === 'skip') {\n  replyMessage = `\u23ed\ufe0f *\u0110\u00e3 b\u1ecf qua b\u00e0i vi\u1ebft n\u00e0y.* \u2014 b\u1edfi @${userName}`;\n} else if (actionId === 'approve_ad_campaign') {\n  const campName = parsedValue.name || 'B\u00e0i vi\u1ebft Marketing';\n  replyMessage = `\ud83d\ude80 *\u0110\u00c3 DUY\u1ec6T & \u0110ANG T\u1ef0 \u0110\u1ed8NG \u0110\u0102NG B\u00c0I L\u00caN FACEBOOK:* [${campName}]\\n> \ud83d\udc64 *Ph\u00ea duy\u1ec7t b\u1edfi:* @${userName} v\u00e0o l\u00fac ${new Date().toLocaleTimeString('vi-VN')}`;\n  publishToFacebook = true;\n  if (campaignId) {\n    dbQuery = `UPDATE campaigns SET status = 'PUBLISHED', approved_by = '${userName}', approved_at = CURRENT_TIMESTAMP WHERE id = '${campaignId}';`;\n  }\n} else if (actionId === 'reject_ad_campaign') {\n  const campName = parsedValue.name || 'B\u00e0i vi\u1ebft Marketing';\n  replyMessage = `\u274c *\u0110\u00c3 T\u1eea CH\u1ed0I B\u00c0I VI\u1ebeT:* [${campName}] \u2014 b\u1edfi @${userName}`;\n  if (campaignId) {\n    dbQuery = `UPDATE campaigns SET status = 'REJECTED' WHERE id = '${campaignId}';`;\n  }\n} else if (actionId === 'claim_lead') {\n  replyMessage = `\ud83e\udd1d *Lead \u0111\u00e3 \u0111\u01b0\u1ee3c nh\u1eadn ph\u1ee5 tr\u00e1ch b\u1edfi:* @${userName}`;\n} else if (actionId === 'book_meeting') {\n  replyMessage = `\ud83d\udcc5 *\u0110\u00e3 chuy\u1ec3n tr\u1ea1ng th\u00e1i \u0110\u1eb7t l\u1ecbch t\u01b0 v\u1ea5n (Book Meeting) b\u1edfi:* @${userName}`;\n} else if (actionId === 'create_campaign_for_opportunity' || actionId === 'create_content_for_opportunity') {\n  replyMessage = `\u26a1 *\u0110ang t\u1ea1o B\u00e0i vi\u1ebft Marketing & \u0110\u1ec1 xu\u1ea5t Chi\u1ebfn d\u1ecbch cho C\u01a1 h\u1ed9i n\u00e0y...* (Y\u00eau c\u1ea7u b\u1edfi @${userName})`;\n  triggerCampaignWebhook = true;\n}\n\nreturn [{\n  json: {\n    action_id: actionId,\n    response_url: responseUrl,\n    user_name: userName,\n    user_id: userId,\n    reply_message: replyMessage,\n    db_query: dbQuery,\n    parsed_value: parsedValue,\n    trigger_campaign_webhook: triggerCampaignWebhook,\n    publish_to_facebook: publishToFacebook,\n    trigger_short_approval: triggerShortApproval,\n    short_id: shortId,\n    short_action: shortAction,\n    campaign_id: campaignId,\n    direct_post_content: directPostContent,\n    opportunity_id: targetOpportunityId\n  }\n}];"
       },
       "id": "node-parse",
       "name": "Parse Slack Action",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [320, 440]
+      "position": [
+        320,
+        440
+      ]
     },
     {
       "parameters": {
@@ -65,7 +74,10 @@
       "name": "Has DB Update?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [540, 300]
+      "position": [
+        540,
+        300
+      ]
     },
     {
       "parameters": {
@@ -76,7 +88,10 @@
       "name": "Update Campaign Status",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [760, 260],
+      "position": [
+        760,
+        260
+      ],
       "credentials": {
         "postgres": {
           "id": "stark-postgres-cred",
@@ -110,7 +125,10 @@
       "name": "Trigger Campaign?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [540, 440]
+      "position": [
+        540,
+        440
+      ]
     },
     {
       "parameters": {
@@ -136,7 +154,10 @@
       "name": "Trigger Campaign Engine",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [760, 420],
+      "position": [
+        760,
+        420
+      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -165,7 +186,10 @@
       "name": "Publish to Facebook?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [540, 580]
+      "position": [
+        540,
+        580
+      ]
     },
     {
       "parameters": {
@@ -176,7 +200,10 @@
       "name": "Fetch Post Content from DB",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [760, 580],
+      "position": [
+        760,
+        580
+      ],
       "credentials": {
         "postgres": {
           "id": "stark-postgres-cred",
@@ -186,13 +213,16 @@
     },
     {
       "parameters": {
-        "jsCode": "const dbData = $input.first()?.json || {};\nconst parsedContext = $('Parse Slack Action').first()?.json || {};\n\nconst contentToPost = dbData.post_content || dbData.fb_content || dbData.var_a || parsedContext.direct_post_content || '🚀 Thiết kế Website chuẩn quốc tế cùng S.T.A.R.K\\n\\n📁 Portfolio chính thức: https://company-plum-rho.vercel.app/\\n📞 Hotline/Zalo: 0845.663.357';\n\nreturn [{\n  json: {\n    postText: contentToPost\n  }\n}];"
+        "jsCode": "const dbData = $input.first()?.json || {};\nconst parsedContext = $('Parse Slack Action').first()?.json || {};\n\nconst contentToPost = dbData.post_content || dbData.fb_content || dbData.var_a || parsedContext.direct_post_content || '\ud83d\ude80 Thi\u1ebft k\u1ebf Website chu\u1ea9n qu\u1ed1c t\u1ebf c\u00f9ng S.T.A.R.K\\n\\n\ud83d\udcc1 Portfolio ch\u00ednh th\u1ee9c: https://company-plum-rho.vercel.app/\\n\ud83d\udcde Hotline/Zalo: 0845.663.357';\n\nreturn [{\n  json: {\n    postText: contentToPost\n  }\n}];"
       },
       "id": "node-prepare-post-body",
       "name": "Prepare Post Text",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 580]
+      "position": [
+        960,
+        580
+      ]
     },
     {
       "parameters": {
@@ -218,7 +248,10 @@
       "name": "Auto Post to Facebook",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1160, 580],
+      "position": [
+        1160,
+        580
+      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -228,7 +261,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -240,58 +276,239 @@
       "name": "Update Slack UI",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1020, 300]
+      "position": [
+        1020,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-trigger-short",
+              "leftValue": "={{ $json.trigger_short_approval }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-if-trigger-short",
+      "name": "Trigger Short Callback?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        540,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://shorts-factory-worker:4100/api/approval/callback",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ shortId: $json.short_id, action: $json.short_action }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "node-trigger-short-worker",
+      "name": "Shorts Worker Approval Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        720
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse Slack Action').item.json.response_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ replace_original: true, text: $json.action === 'PUBLISHED' ? ('\ud83c\udf89 *VIDEO \u0110\u00c3 \u0110\u01af\u1ee2C C\u00d4NG KHAI TH\u00c0NH C\u00d4NG L\u00caN YOUTUBE!*\\n\u25b6\ufe0f *Xem ngay:* ' + $json.youtubeUrl) : ($json.action === 'DISCARDED' ? '\ud83d\uddd1\ufe0f *\u0110\u00e3 h\u1ee7y b\u1ecf video th\u00e0nh c\u00f4ng.*' : '\ud83d\udd04 *\u0110\u00e3 chuy\u1ec3n video v\u1ec1 h\u00e0ng ch\u1edd t\u1ea1o l\u1ea1i.*') }) }}",
+        "options": {}
+      },
+      "id": "node-update-slack-short-result",
+      "name": "Update Slack with Shorts Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1020,
+        720
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
     "Slack Webhook": {
       "main": [
         [
-          { "node": "Respond 200 to Slack", "type": "main", "index": 0 },
-          { "node": "Parse Slack Action", "type": "main", "index": 0 }
+          {
+            "node": "Respond 200 to Slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parse Slack Action",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Parse Slack Action": {
       "main": [
         [
-          { "node": "Has DB Update?", "type": "main", "index": 0 },
-          { "node": "Trigger Campaign?", "type": "main", "index": 0 },
-          { "node": "Publish to Facebook?", "type": "main", "index": 0 },
-          { "node": "Update Slack UI", "type": "main", "index": 0 }
+          {
+            "node": "Trigger Short Callback?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has DB Update?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trigger Campaign?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Publish to Facebook?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Slack UI",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Has DB Update?": {
       "main": [
-        [{ "node": "Update Campaign Status", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Update Campaign Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Trigger Campaign?": {
       "main": [
-        [{ "node": "Trigger Campaign Engine", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Trigger Campaign Engine",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Publish to Facebook?": {
       "main": [
-        [{ "node": "Fetch Post Content from DB", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Fetch Post Content from DB",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Fetch Post Content from DB": {
       "main": [
-        [{ "node": "Prepare Post Text", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Prepare Post Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Prepare Post Text": {
       "main": [
-        [{ "node": "Auto Post to Facebook", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Auto Post to Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Short Callback?": {
+      "main": [
+        [
+          {
+            "node": "Shorts Worker Approval Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Shorts Worker Approval Callback": {
+      "main": [
+        [
+          {
+            "node": "Update Slack with Shorts Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "active": true,
-  "settings": { "executionOrder": "v1" },
-  "tags": [{ "name": "STARK" }]
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "STARK"
+    }
+  ]
 }

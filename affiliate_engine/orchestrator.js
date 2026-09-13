@@ -372,7 +372,7 @@ class AffiliateOrchestrator {
           else sold = Number(rawSold.replace(/[^0-9]/g, '')) || 100;
         }
 
-        const commRate = parseFloat((rawCommRate || '10').replace(/[^0-9.]/g, '')) || 10.0;
+        const commRate = parseFloat((rawCommRate || '10').replace(',', '.').replace(/[^0-9.]/g, '')) || 10.0;
         const commAmount = Number((rawCommAmount || '').replace(/[^0-9]/g, '')) || Math.round((price * commRate) / 100);
 
         let shopId = 88800000;

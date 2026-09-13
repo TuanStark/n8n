@@ -58,26 +58,37 @@ export class FFmpegEngine {
   }
 
   /**
-   * Generates procedural tactile Paper ASMR soundscape (paper sliding, friction, soft knocks)
+   * Generates procedural cinematic soundscape (0:00 Sub-Bass Boom, Whoosh Impact, Tension Riser, and tactile Paper ASMR)
    */
-  async generatePaperAsmrSoundscape(durationSec: number, outputPath: string): Promise<string> {
+  async generateCinematicSoundscape(durationSec: number, outputPath: string): Promise<string> {
     const dur = Math.max(5, Math.ceil(durationSec));
 
-    // Synthesize layered paper friction (pink noise filtered) + cardboard resonance (brown noise)
+    // Synthesize rich multi-layered cinematic audio bed:
+    // 0. Sub-Bass Impact Boom (exponential pitch-decaying 65Hz sine wave at 0:00)
+    // 1. Whoosh Sweep (bandpassed pink noise burst at 0:00)
+    // 2. Suspense Heartbeat / Tension Riser (120 BPM pulse between 2s and 18s)
+    // 3. Pink noise bandpassed (sliding paper friction & surface texture)
+    // 4. Brown noise lowpassed (dense cardboard knock & resonance)
+    // 5. White noise highpassed (crisp laser-cut cardstock grain)
     const cmd = `ffmpeg -y \
-      -f lavfi -i "anoisesrc=c=pink:r=48000:a=0.08" \
-      -f lavfi -i "anoisesrc=c=brown:r=48000:a=0.04" \
-      -filter_complex "[0:a]bandpass=f=2200:width_type=h:w=1400,volume=1.2[paper];[1:a]lowpass=f=550,volume=0.6[thud];[paper][thud]amix=inputs=2[asmr]" \
-      -map "[asmr]" \
+      -f lavfi -i "aevalsrc='sin(2*PI*65*exp(-1.8*t)*t)*exp(-2.0*t)':s=48000:d=3" \
+      -f lavfi -i "anoisesrc=c=pink:r=48000:a=0.15" \
+      -f lavfi -i "aevalsrc='sin(2*PI*120*t)*exp(-30*mod(t,0.5))*gte(t,2)*lte(t,18)':s=48000:d=${dur}" \
+      -f lavfi -i "anoisesrc=c=pink:r=48000:a=0.07" \
+      -f lavfi -i "anoisesrc=c=brown:r=48000:a=0.05" \
+      -f lavfi -i "anoisesrc=c=white:r=48000:a=0.015" \
+      -filter_complex "[0:a]volume=1.8[boom];[1:a]bandpass=f=1200:w=800,afade=t=in:st=0:d=0.05,afade=t=out:st=0.2:d=0.8,volume=1.3[whoosh];[2:a]lowpass=f=250,volume=0.32[heartbeat];[3:a]bandpass=f=2400:w=1500,volume=0.85[paper];[4:a]lowpass=f=450,volume=0.55[thud];[5:a]highpass=f=3500,volume=0.45[grain];[boom][whoosh][heartbeat][paper][thud][grain]amix=inputs=6[cinematic_bed]" \
+      -map "[cinematic_bed]" \
       -t ${dur} \
+      -c:a libmp3lame \
       "${outputPath}"`;
 
     try {
       await execAsync(cmd);
+      console.log(`[FFmpegEngine] ✅ Generated multi-layer cinematic soundscape (${dur}s): ${outputPath}`);
     } catch (err) {
-      console.warn(`[FFmpegEngine] Failed to synthesize ASMR soundscape, creating silent track fallback`, err);
-      // Fallback silence
-      const silentCmd = `ffmpeg -y -f lavfi -i "anullsrc=r=48000:cl=mono" -t ${dur} "${outputPath}"`;
+      console.warn(`[FFmpegEngine] Failed to synthesize cinematic soundscape, creating silent track fallback`, err);
+      const silentCmd = `ffmpeg -y -f lavfi -i "anullsrc=r=48000:cl=mono" -t ${dur} -c:a libmp3lame "${outputPath}"`;
       await execAsync(silentCmd).catch(() => {});
     }
 
@@ -85,7 +96,7 @@ export class FFmpegEngine {
   }
 
   /**
-   * Renders YouTube Shorts adhering to Master Stop-Motion rules (12fps, locked camera, vignette, paper ASMR)
+   * Renders YouTube Shorts adhering to Master Stop-Motion rules (stepped 12fps cadence on twos, micro-jitter, paper transitions, paper ASMR)
    */
   async renderShort(
     shortId: string,
@@ -104,19 +115,18 @@ export class FFmpegEngine {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    console.log(`[FFmpegEngine] 🎬 Starting 60FPS Silky Smooth Cinematic Render for ${shortId} (${scenes.length} scenes)...`);
+    console.log(`[FFmpegEngine] 🎬 Starting Master Tactile Paper Stop-Motion Render for ${shortId} (${scenes.length} scenes)...`);
 
     try {
-      const fps = 60; // 60 FPS for silky-smooth motion and fluid transitions
-      const transitionDuration = 0.6; // 0.6s smooth crossfade/slide
-      const asmrAudioPath = path.join(rendersDir, `paper_asmr_34s.mp3`);
+      // 24 FPS timeline with stepped evaluation on "twos" (12fps discrete steps) for genuine stop-motion texture
+      const fps = 24;
+      const transitionDuration = 0.35; // 0.35s crisp cardstock slide / razor-cut wipe
+      const cinematicAudioPath = path.join(rendersDir, `cinematic_soundscape_${shortId}.mp3`);
       
-      // Ensure tactile ASMR soundscape bed is ready
+      // Ensure multi-layer cinematic soundscape bed is ready
       const totalEstimatedSec = scenes.reduce((acc, s) => acc + s.durationSec, 0) + 2;
-      if (!fs.existsSync(asmrAudioPath) || fs.statSync(asmrAudioPath).size < 1000) {
-        console.log(`[FFmpegEngine] 🎧 Generating tactile Paper ASMR soundscape track (${totalEstimatedSec}s)...`);
-        await this.generatePaperAsmrSoundscape(Math.max(34, totalEstimatedSec), asmrAudioPath);
-      }
+      console.log(`[FFmpegEngine] 🎧 Generating multi-layer Cinematic Soundscape bed (${totalEstimatedSec}s)...`);
+      await this.generateCinematicSoundscape(Math.max(34, totalEstimatedSec), cinematicAudioPath);
 
       // Build FFmpeg inputs and filter complex
       const inputArgs: string[] = ['-y'];
@@ -127,36 +137,43 @@ export class FFmpegEngine {
         const scene = scenes[i];
         const isLast = i === scenes.length - 1;
         const sceneDuration = isLast ? scene.durationSec : scene.durationSec + transitionDuration;
-        const totalFrames = Math.round(sceneDuration * fps);
+        const totalFrames = Math.max(1, Math.round(sceneDuration * fps));
+        const halfFrames = Math.max(1, Math.round(totalFrames / 2));
 
         inputArgs.push('-loop', '1', '-t', sceneDuration.toFixed(2), '-i', scene.imagePath);
 
-        // Diverse cinematic camera motions — each scene feels different
+        // Tactile Stop-Motion Movements:
+        // - Discrete stepped zoom/pan calculated on twos (floor(n/2))
+        // - Micro-jitter displacement to simulate authentic physical cardstock vibration
         let motionFilter: string;
-        const scaleUp = 1350; // ~25% overscan for more dramatic movement
-        const scaleH = Math.round(scaleUp * (1920 / 1080));
-        if (i % 5 === 0) {
-          // Slow dramatic ZOOM INTO character face (center-weighted)
-          motionFilter = `scale='1080*(1+0.12*n/${totalFrames})':'-1':eval=frame,crop=1080:1920`;
-        } else if (i % 5 === 1) {
-          // Smooth HORIZONTAL PAN left-to-right
-          motionFilter = `scale=${scaleUp}:${scaleH},crop=1080:1920:x='(in_w-out_w)*(n/${totalFrames})':y='(in_h-out_h)/2'`;
-        } else if (i % 5 === 2) {
-          // VERTICAL TILT UP (reveal from bottom to top)
-          motionFilter = `scale=${scaleUp}:${scaleH},crop=1080:1920:x='(in_w-out_w)/2':y='(in_h-out_h)*(1-n/${totalFrames})'`;
-        } else if (i % 5 === 3) {
-          // DIAGONAL DRIFT (top-left to bottom-right) — cinematic slide
-          motionFilter = `scale=${scaleUp}:${scaleH},crop=1080:1920:x='(in_w-out_w)*(n/${totalFrames})':y='(in_h-out_h)*(n/${totalFrames})'`;
+        const scaleUpW = 1200;
+        const scaleUpH = 2133;
+        const motionType = i % 5;
+        const preCrop = `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920`;
+
+        if (motionType === 0) {
+          // 1. Stepped Hero Push-In: Dramatic zoom into the 70% Hero Sculpture
+          motionFilter = `${preCrop},scale='1080*(1+0.07*floor(n/2)/${halfFrames})':'-1':eval=frame,crop=1080:1920:x='(in_w-out_w)/2 + (mod(floor(n/2)*7, 5) - 2)*0.9':y='(in_h-out_h)/2 + (mod(floor(n/2)*11, 5) - 2)*0.9'`;
+        } else if (motionType === 1) {
+          // 2. Stepped Horizontal Track: Reveal stacked paper cardstock layers left-to-right
+          motionFilter = `scale=${scaleUpW}:${scaleUpH}:force_original_aspect_ratio=increase,crop=${scaleUpW}:${scaleUpH},crop=1080:1920:x='(in_w-out_w)*(floor(n/2)/${halfFrames}) + (mod(floor(n/2)*5, 5) - 2)*0.8':y='(in_h-out_h)/2 + (mod(floor(n/2)*7, 5) - 2)*0.8'`;
+        } else if (motionType === 2) {
+          // 3. Stepped Vertical Scan: Ascend through contour slices from bottom to top
+          motionFilter = `scale=${scaleUpW}:${scaleUpH}:force_original_aspect_ratio=increase,crop=${scaleUpW}:${scaleUpH},crop=1080:1920:x='(in_w-out_w)/2 + (mod(floor(n/2)*11, 5) - 2)*0.8':y='(in_h-out_h)*(1 - floor(n/2)/${halfFrames}) + (mod(floor(n/2)*13, 5) - 2)*0.8'`;
+        } else if (motionType === 3) {
+          // 4. Stepped Pull-Back: Reveal the monumental complete paper relief
+          motionFilter = `${preCrop},scale='1080*(1.07-0.07*floor(n/2)/${halfFrames})':'-1':eval=frame,crop=1080:1920:x='(in_w-out_w)/2 + (mod(floor(n/2)*9, 5) - 2)*0.9':y='(in_h-out_h)/2 + (mod(floor(n/2)*13, 5) - 2)*0.9'`;
         } else {
-          // PULL-BACK zoom out (dramatic reveal)
-          motionFilter = `scale='1080*(1.12-0.12*n/${totalFrames})':'-1':eval=frame,crop=1080:1920`;
+          // 5. Hero Relief Focus: Locked camera with subtle organic stop-motion paper breathing
+          motionFilter = `scale=1110:1973:force_original_aspect_ratio=increase,crop=1110:1973,crop=1080:1920:x='(in_w-out_w)/2 + (mod(floor(n/2)*7, 7) - 3)*1.0':y='(in_h-out_h)/2 + (mod(floor(n/2)*11, 7) - 3)*1.0'`;
         }
 
         filterLines.push(`[${i}:v]${motionFilter},fps=${fps},setsar=1[v${i}]`);
       }
 
-      // Chain xfade transitions between consecutive scenes
-      const transitions = ['fade', 'smoothleft', 'fade', 'fade', 'smoothup'];
+      // Chain tactile cardstock transitions between consecutive scenes:
+      // Real paper slide-ins, razor-cut wipes, and cardboard crop reveals (NO mushy dissolved crossfades)
+      const transitions = ['slideleft', 'slideright', 'wipeleft', 'wiperight', 'slideup', 'rectcrop'];
       let lastStream = 'v0';
 
       for (let i = 0; i < scenes.length - 1; i++) {
@@ -170,12 +187,13 @@ export class FFmpegEngine {
         lastStream = outStream;
       }
 
-      // Add cinematic color grading, soft vignette, letterbox, and subtitles
+      // Authentic tactile papercraft color grading:
+      // Enhanced cardstock depth, warm museum directional lighting, cast shadow richness, subtle vignette
       let finalVideoNode = lastStream;
       const colorGrading = [
-        'eq=contrast=1.08:brightness=0.02:saturation=1.15',  // Slight contrast + saturation boost
-        'colorbalance=rs=0.04:gs=0.01:bs=-0.03:rh=0.02:gh=0.0:bh=-0.02',  // Warm tone shift
-        'vignette=PI/3.5',  // Subtle vignette (softer than before)
+        'eq=contrast=1.12:brightness=0.01:saturation=1.10',
+        'colorbalance=rs=0.03:gs=0.01:bs=-0.02:rh=0.02:gh=0.0:bh=-0.01',
+        'vignette=PI/3.8',
       ].join(',');
 
       if (subtitleAssPath && fs.existsSync(subtitleAssPath)) {
@@ -191,16 +209,16 @@ export class FFmpegEngine {
         finalVideoNode = 'vout';
       }
 
-      // Audio inputs: Narration (index = scenes.length), ASMR (index = scenes.length + 1)
+      // Audio inputs: Narration (index = scenes.length), Cinematic Soundscape (index = scenes.length + 1)
       const voiceIdx = scenes.length;
-      const asmrIdx = scenes.length + 1;
+      const sfxIdx = scenes.length + 1;
       inputArgs.push('-i', audioPath);
-      inputArgs.push('-i', asmrAudioPath);
+      inputArgs.push('-i', cinematicAudioPath);
 
-      filterLines.push(`[${voiceIdx}:a]volume=1.0[voice]`);
-      filterLines.push(`[${asmrIdx}:a]volume=0.16[asmr_a]`);
+      filterLines.push(`[${voiceIdx}:a]volume=1.05[voice]`);
+      filterLines.push(`[${sfxIdx}:a]volume=0.38[sfx_bed]`);
       filterLines.push(
-        `[voice][asmr_a]amix=inputs=2:duration=first:dropout_transition=2,loudnorm=I=-14:LRA=7:tp=-1[aout]`
+        `[voice][sfx_bed]amix=inputs=2:duration=first:dropout_transition=2,loudnorm=I=-14:LRA=7:tp=-1[aout]`
       );
 
       const assembleCmd = `ffmpeg ${inputArgs.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')} \
@@ -210,9 +228,9 @@ export class FFmpegEngine {
         -c:a aac -b:a 192k -ar 48000 \
         "${outputPath}"`;
 
-      console.log(`[FFmpegEngine] Assembling final 60FPS smooth master short: ${outputPath}`);
+      console.log(`[FFmpegEngine] Assembling final tactile paper stop-motion master short: ${outputPath}`);
       await execAsync(assembleCmd);
-      console.log(`[FFmpegEngine] ✅ 60FPS Render complete! Duration: ${scenes.reduce((a, b) => a + b.durationSec, 0)}s`);
+      console.log(`[FFmpegEngine] ✅ Tactile Paper Stop-Motion Render complete! Duration: ${scenes.reduce((a, b) => a + b.durationSec, 0)}s`);
 
       // Clean up temp directory
       fs.rmSync(tempDir, { recursive: true, force: true });

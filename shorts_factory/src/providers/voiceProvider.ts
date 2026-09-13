@@ -109,7 +109,43 @@ export class VoiceProvider {
       }
     }
 
-    // 2. Fallback: Google Translate TTS with sentence-level chunking
+    // 2. High-Quality Neural TTS: Microsoft Edge TTS (en-US-ChristopherNeural)
+    try {
+      console.log(`[VoiceProvider] Synthesizing cinematic narration via Microsoft Edge TTS Neural (en-US-ChristopherNeural)...`);
+      const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
+      const tts = new MsEdgeTTS();
+      await tts.setMetadata('en-US-ChristopherNeural', OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+      
+      const tempDir = path.join(audioDir, `edge_${Date.now()}_${Math.random().toString(36).substring(7)}`);
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      const edgeRes = await tts.toFile(tempDir, text, { rate: '+4%' });
+      const generatedAudioPath = edgeRes.audioFilePath || path.join(tempDir, 'audio.mp3');
+
+      if (fs.existsSync(generatedAudioPath) && fs.statSync(generatedAudioPath).size > 1000) {
+        fs.copyFileSync(generatedAudioPath, outputPath);
+        fs.rmSync(tempDir, { recursive: true, force: true });
+
+        const stats = fs.statSync(outputPath);
+        const probeCmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${outputPath}"`;
+        const { stdout: durStdout } = await execAsync(probeCmd);
+        const duration = parseFloat(durStdout.trim()) || 32.0;
+
+        console.log(`[VoiceProvider] ✅ Microsoft Edge TTS Neural synthesized successfully (${duration}s, ${(stats.size / 1024).toFixed(1)} KB)`);
+
+        return {
+          audioPath: outputPath,
+          durationSec: parseFloat(duration.toFixed(2)),
+          provider: 'msedge_tts_christopher_neural',
+          fileSizeBytes: stats.size,
+        };
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (err: any) {
+      console.warn('[VoiceProvider] Microsoft Edge TTS failed, falling back to Google TTS:', err?.message || err);
+    }
+
+    // 3. Fallback: Google Translate TTS with sentence-level chunking
     console.log(`[VoiceProvider] Synthesizing narration via Google TTS chunked engine...`);
     try {
       const chunks = this.splitIntoChunks(text, 100);
