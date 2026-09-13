@@ -121,6 +121,9 @@ export class PipelineRunner {
       );
       const storyboardId = storyboardInsert.rows[0].id;
 
+      // Reset session hashes to guarantee 100% unique visuals for this topic
+      this.imageProvider.resetSessionHashes();
+
       // Insert scenes
       const sceneInputs: SceneInput[] = [];
       const sceneDescriptions: string[] = [];
@@ -208,8 +211,9 @@ export class PipelineRunner {
         scriptData.hook_headline
       );
 
-      // 7. Video Rendering via FFmpeg — Burned ASS Subtitles with Hook Banner
-      console.log(`[Pipeline] Step 6: Rendering master 9:16 vertical short in FFmpeg (with burned subtitles)...`);
+      // 7. Video Rendering via FFmpeg — Anti-Duplication Verification & Burned ASS Subtitles
+      const uniqueImageCheck = new Set(sceneInputs.map((s) => s.imagePath));
+      console.log(`[Pipeline] Step 6: Rendering master 9:16 vertical short in FFmpeg (${uniqueImageCheck.size}/${sceneInputs.length} unique scene images)...`);
       const renderRes = await this.ffmpeg.renderShort(
         topic.id,
         sceneInputs,

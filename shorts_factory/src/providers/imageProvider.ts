@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { config } from '../config';
@@ -44,11 +45,28 @@ const NEGATIVE_PROMPT =
 
 export class ImageProvider {
   private rawStorageDir: string;
+  private sessionHashes: Set<string> = new Set<string>();
 
   constructor() {
     this.rawStorageDir = config.storage.raw;
     if (!fs.existsSync(this.rawStorageDir)) {
       fs.mkdirSync(this.rawStorageDir, { recursive: true });
+    }
+  }
+
+  /**
+   * Resets session hash set for a new video pipeline run to ensure zero duplication
+   */
+  resetSessionHashes(): void {
+    this.sessionHashes.clear();
+  }
+
+  private calculateFileHash(filePath: string): string {
+    try {
+      const buffer = fs.readFileSync(filePath);
+      return crypto.createHash('md5').update(buffer).digest('hex');
+    } catch {
+      return '';
     }
   }
 
@@ -79,15 +97,21 @@ export class ImageProvider {
   }
 
   /**
-   * Generates a 9:16 vertical visual artwork for a scene
+   * Generates a 9:16 vertical visual artwork for a scene with strict duplicate prevention
    */
   async generateSceneImage(params: SceneImageParams): Promise<string> {
     const filename = `scene_${params.storyboardId}_${params.sceneIndex}.jpg`;
     const outputPath = path.join(this.rawStorageDir, filename);
 
     if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 5000) {
-      console.log(`[ImageProvider] Scene ${params.sceneIndex} artwork already exists at ${outputPath}`);
-      return outputPath;
+      const existingHash = this.calculateFileHash(outputPath);
+      if (existingHash && !this.sessionHashes.has(existingHash)) {
+        this.sessionHashes.add(existingHash);
+        console.log(`[ImageProvider] Scene ${params.sceneIndex} artwork already exists at ${outputPath} (Hash: ${existingHash.slice(0, 8)})`);
+        return outputPath;
+      }
+      console.warn(`[ImageProvider] ⚠️ Existing file ${outputPath} matches a duplicate hash in this video! Deleting and re-generating fresh image...`);
+      try { fs.unlinkSync(outputPath); } catch {}
     }
 
     const scenePrompt = this.buildScenePrompt(params);
@@ -95,19 +119,44 @@ export class ImageProvider {
     console.log(`[ImageProvider] 🎨 Generating Scene ${params.sceneIndex} artwork...`);
     console.log(`[ImageProvider] Prompt: "${scenePrompt.slice(0, 150)}..." (${scenePrompt.length} chars)`);
 
+    let finalPath: string | null = null;
+
     // 1. Try Google Gemini Image Models first
     if (config.gemini.apiKey) {
-      const geminiResult = await this.tryGeminiImageGeneration(scenePrompt, outputPath, params.sceneIndex);
-      if (geminiResult) return geminiResult;
+      finalPath = await this.tryGeminiImageGeneration(scenePrompt, outputPath, params.sceneIndex);
     }
 
     // 2. Try Pollinations AI fallback
-    const pollinationsResult = await this.tryPollinationsGeneration(scenePrompt, outputPath, params.sceneIndex);
-    if (pollinationsResult) return pollinationsResult;
+    if (!finalPath) {
+      finalPath = await this.tryPollinationsGeneration(scenePrompt, outputPath, params.sceneIndex);
+    }
 
     // 3. Last resort: procedural fallback
-    console.warn(`[ImageProvider] All AI endpoints failed. Generating procedural fallback...`);
-    return await this.generateProceduralPapercraftFallback(params, outputPath);
+    if (!finalPath) {
+      console.warn(`[ImageProvider] All AI endpoints failed. Generating procedural fallback...`);
+      finalPath = await this.generateProceduralPapercraftFallback(params, outputPath);
+    }
+
+    // STRICT ANTI-DUPLICATION VERIFICATION:
+    // If generated image hash matches ANY previous scene in this video, re-roll immediately with a new seed
+    const hash = this.calculateFileHash(finalPath);
+    if (hash && this.sessionHashes.has(hash)) {
+      console.warn(`[ImageProvider] 🚨 DUPLICATE DETECTED for Scene ${params.sceneIndex} (Hash ${hash.slice(0, 8)}). Re-rolling unique image...`);
+      try { fs.unlinkSync(finalPath); } catch {}
+      const rerollPrompt = `${scenePrompt} Alternate dynamic perspective composition variant ${Date.now()}`;
+      const rerollPath = await this.tryPollinationsGeneration(rerollPrompt, outputPath, params.sceneIndex);
+      if (rerollPath) {
+        const rerollHash = this.calculateFileHash(rerollPath);
+        this.sessionHashes.add(rerollHash);
+        return rerollPath;
+      }
+    }
+
+    if (hash) {
+      this.sessionHashes.add(hash);
+    }
+
+    return finalPath;
   }
 
   /**

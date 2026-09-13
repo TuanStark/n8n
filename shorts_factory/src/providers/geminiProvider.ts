@@ -261,6 +261,10 @@ STRICT COMPOSITION RULE (THE 70/20/10 RULE):
 2. 20% SUPPORTING OBJECTS: Maximum 2–3 supporting objects that add narrative meaning. Nothing random, no decorative clutter.
 3. 10% BACKGROUND & GENEROUS NEGATIVE SPACE: Custom thematic background with large clean breathing room.
 
+ABSOLUTE ZERO-DUPLICATION MANDATE (STRICT VARIETY):
+- Every single scene (1 to ${script.narration_segments.length}) MUST feature a COMPLETELY DIFFERENT, UNIQUE Hero Object, distinct historical artifact, and distinct visual metaphor.
+- ABSOLUTELY FORBIDDEN: NEVER repeat or reuse the same object, person, mask, weapon, or scroll across multiple scenes in the same short! Each scene must be a fresh, surprising visual discovery. If Scene 1 is a Pharaoh golden mask, Scene 2 must be towering temple pillars, Scene 3 a bronze dagger, Scene 4 a papyrus trial scroll, Scene 5 an embalming vessel, etc. No scene may duplicate another.
+
 PAPER CONSTRUCTION RULES (MUST REVEAL IN EVERY SCENE):
 - Every visible object must reveal: 30–100 individually cut paper layers, visible cardstock thickness, laser-cut edges, raw paper fibers, stacked contour slices, recessed paper layers, handcrafted glue joints, and deep shadow gaps between layers.
 - Materials: thick cardstock, handmade paper, kraft paper, matte construction paper, watercolor paper.
