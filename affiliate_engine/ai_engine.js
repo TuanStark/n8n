@@ -455,6 +455,75 @@ Output JSON schema:
       seed: list[0]?.seed
     };
   }
+
+  /**
+   * 7. AGENT TẠO HOOK & THÔNG ĐIỆP STORY 9:16 (STORY HOOK ENGINE)
+   * Tối ưu cho cơ chế Zero-Scroll 3 giây đầu trên Facebook & Instagram Story
+   */
+  async generateStoryHook(product, contentAngle = 'PROBLEM_SOLUTION', postDraft = null) {
+    const productName = product.product_name || product.productName || 'Đồ Gia Dụng Tiện Ích';
+    const hookSource = postDraft?.hook_text || '';
+    
+    const systemPrompt = `You are an elite Social Media Copywriter specializing in viral Facebook & Instagram Stories for home products.
+Target: Facebook Page "Nhà Có Món Hay".
+Goal: Create a scroll-stopping 9:16 Story Hook that compels users to stop tapping and click to view the full Facebook Page post.
+
+Story Copywriting Rules:
+1. hook_text: Extremely punchy, uppercase, 8 to 14 words max. Highlights an immediate daily frustration, surprising household hack, or unbelievable price deal. Must be in Vietnamese.
+2. sub_text: 1 short explanatory sentence (12 to 20 words) giving context or resolution.
+3. cta_text: Clear imperative command (4 to 8 words) telling the viewer to visit the Page / view the post (e.g. "XEM BÀI REVIEW TRÊN TRANG", "BẤM XEM CHI TIẾT TRÊN TRANG", "XEM CÁCH DÙNG TRÊN PAGE").
+4. theme: Choose one of ['ORANGE', 'CYAN', 'EMERALD', 'PURPLE'] that best fits the product mood. (e.g. ORANGE for hot deals/urgency, CYAN for cleaning/bathroom/smart gadgets, EMERALD for eco/kitchen/organization, PURPLE for luxury/decor).
+
+Output JSON schema:
+{
+  "hook_text": string,
+  "sub_text": string,
+  "cta_text": string,
+  "theme": "ORANGE" | "CYAN" | "EMERALD" | "PURPLE"
+}`;
+
+    const userPrompt = `Product: ${productName}
+Angle: ${contentAngle}
+Reference Feed Hook: ${hookSource}`;
+
+    try {
+      const res = await this._callGemini(systemPrompt, userPrompt, 0.4);
+      if (res && res.hook_text) {
+        return {
+          hook_text: String(res.hook_text).toUpperCase().trim(),
+          sub_text: String(res.sub_text || '').trim(),
+          cta_text: String(res.cta_text || 'XEM BÀI VIẾT TRÊN TRANG').toUpperCase().trim(),
+          theme: ['ORANGE', 'CYAN', 'EMERALD', 'PURPLE'].includes(res.theme) ? res.theme : 'ORANGE'
+        };
+      }
+    } catch (err) {
+      console.warn('[AI_STORY_HOOK_WARN]', err.message);
+    }
+
+    // Fallback nếu AI bận hoặc lỗi quota
+    const fallbackHooks = {
+      PROBLEM_SOLUTION: {
+        hook_text: 'MẸO NHỎ NÀY SẼ CỨU BẠN KHỎI SỰ BỪA BỘN TRONG 30 GIÂY!',
+        sub_text: 'Giải pháp cực gọn gàng cho ngôi nhà mà bạn ước gì mình biết sớm hơn.',
+        cta_text: 'XEM BÀI REVIEW TRÊN TRANG',
+        theme: 'ORANGE'
+      },
+      CURIOSITY: {
+        hook_text: 'MÓN ĐỒ NÀY ĐANG GÂY SỐT MẠNG XÃ HỘI VÌ QUÁ TIỆN LỢI!',
+        sub_text: 'Nhỏ mà có võ, xem ngay cách nó thay đổi căn phòng của bạn.',
+        cta_text: 'XEM CHI TIẾT TRÊN TRANG',
+        theme: 'PURPLE'
+      },
+      WORTH_IT: {
+        hook_text: 'ĐỒ GIA DỤNG ĐÁNG ĐỒNG TIỀN BÁT GẠO NHẤT NĂM NAY!',
+        sub_text: 'Hơn 2.000 người đã mua và cho 5 sao, cùng xem thực hư ra sao.',
+        cta_text: 'XEM ĐÁNH GIÁ TRÊN PAGE',
+        theme: 'CYAN'
+      }
+    };
+
+    return fallbackHooks[contentAngle] || fallbackHooks.PROBLEM_SOLUTION;
+  }
 }
 
 module.exports = GeminiAffiliateAIEngine;

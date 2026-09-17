@@ -111,8 +111,66 @@ app.post('/api/approval/callback', async (req, res) => {
         console.log(`[API] ✅ Video ${videoId} is now PUBLIC and PUBLISHED!`);
         return res.json({ success: true, action: 'PUBLISHED', videoId, youtubeUrl: `https://youtube.com/shorts/${videoId}` });
       } else {
-        console.warn(`[API] No YouTube video found for topic ${topicId}`);
-        return res.json({ success: true, action, status: 'NO_VIDEO_FOUND' });
+        // Fallback: Check if rendered master video exists on disk
+        const renderPath = path.join(config.storage.renders, `${topicId}_master.mp4`);
+        if (fs.existsSync(renderPath)) {
+          console.log(`[API] Master video found on disk at ${renderPath}. Attempting direct YouTube upload as PUBLIC...`);
+          const topicRes = await pool.query(
+            `SELECT t.id, t.title, t.category, sc.full_script, r.id as render_job_id
+             FROM topics t
+             LEFT JOIN scripts sc ON sc.topic_id = t.id
+             LEFT JOIN storyboards sb ON sb.script_id = sc.id
+             LEFT JOIN render_jobs r ON r.storyboard_id = sb.id
+             WHERE t.id = $1
+             ORDER BY r.created_at DESC LIMIT 1`,
+            [topicId]
+          );
+
+          if (topicRes.rows.length > 0) {
+            const row = topicRes.rows[0];
+            try {
+              const uploadRes = await youtube.uploadShort(renderPath, {
+                title: row.title,
+                description: row.full_script || row.title,
+                category: row.category || 'history',
+                privacyStatus: 'public',
+              });
+
+              await pool.query(
+                `INSERT INTO youtube_videos (
+                  topic_id, render_job_id, youtube_video_id, title, description, tags, privacy_status, upload_status
+                ) VALUES ($1, $2, $3, $4, $5, $6, 'public', 'UPLOADED')`,
+                [
+                  topicId,
+                  row.render_job_id,
+                  uploadRes.videoId,
+                  uploadRes.title.slice(0, 100),
+                  row.full_script || row.title,
+                  ['Shorts', 'history', 'papertheater', row.category || 'history'],
+                ]
+              );
+
+              await pool.query("UPDATE topics SET status = 'PUBLISHED' WHERE id = $1", [topicId]);
+              console.log(`[API] ✅ Fallback upload succeeded: ${uploadRes.youtubeUrl}`);
+              return res.json({
+                success: true,
+                action: 'PUBLISHED',
+                videoId: uploadRes.videoId,
+                youtubeUrl: uploadRes.youtubeUrl,
+              });
+            } catch (uploadErr: any) {
+              console.error(`[API] Fallback YouTube upload failed:`, uploadErr.message);
+              return res.status(500).json({
+                success: false,
+                action: 'UPLOAD_FAILED',
+                error: uploadErr.message,
+              });
+            }
+          }
+        }
+
+        console.warn(`[API] No YouTube video found and no render file for topic ${topicId}`);
+        return res.json({ success: false, action, status: 'NO_VIDEO_FOUND' });
       }
     } else if (action === 'REGENERATE' && topicId) {
       await pool.query("UPDATE topics SET status = 'IDEA' WHERE id = $1", [topicId]);

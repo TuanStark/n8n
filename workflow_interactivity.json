@@ -358,7 +358,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ replace_original: true, text: $json.action === 'PUBLISHED' ? ('\ud83c\udf89 *VIDEO \u0110\u00c3 \u0110\u01af\u1ee2C C\u00d4NG KHAI TH\u00c0NH C\u00d4NG L\u00caN YOUTUBE!*\\n\u25b6\ufe0f *Xem ngay:* ' + $json.youtubeUrl) : ($json.action === 'DISCARDED' ? '\ud83d\uddd1\ufe0f *\u0110\u00e3 h\u1ee7y b\u1ecf video th\u00e0nh c\u00f4ng.*' : '\ud83d\udd04 *\u0110\u00e3 chuy\u1ec3n video v\u1ec1 h\u00e0ng ch\u1edd t\u1ea1o l\u1ea1i.*') }) }}",
+        "jsonBody": "={{ JSON.stringify({ replace_original: true, text: $json.action === 'PUBLISHED' ? ('🎉 *VIDEO ĐÃ ĐƯỢC CÔNG KHAI THÀNH CÔNG LÊN YOUTUBE!*\\n▶️ *Xem ngay:* ' + $json.youtubeUrl) : ($json.action === 'DISCARDED' ? '🗑️ *Đã hủy bỏ video thành công.*' : ($json.action === 'REGENERATED' ? '🔄 *Đã chuyển video về hàng chờ tạo lại.*' : ('⚠️ *Không thể đăng video lên YouTube:* ' + ($json.error || $json.status || 'Token YouTube hết hạn hoặc lỗi kết nối. Video MP4 vẫn an toàn trên máy chủ.')))) }) }}",
         "options": {}
       },
       "id": "node-update-slack-short-result",

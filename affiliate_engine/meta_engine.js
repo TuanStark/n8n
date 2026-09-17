@@ -201,6 +201,102 @@ class MetaPublisherEngine {
     result.reach = Math.round(result.impressions * 0.82);
     return result;
   }
+
+  /**
+   * Đăng Photo Story lên Facebook Page qua Meta Graph API v20.0
+   * Endpoint: POST /{page-id}/photo_stories
+   */
+  async publishPhotoStory({ imagePathOrUrl, caption = '', feedPostId = null }) {
+    if (this.isSimulation) {
+      const mockStoryId = `${this.pageId || 'page'}_story_${Date.now()}`;
+      return {
+        id: mockStoryId,
+        permalink_url: `https://facebook.com/stories/${this.pageId || 'nhacomohay'}/${mockStoryId}`,
+        is_simulation: true
+      };
+    }
+
+    // 1. Upload ảnh ở trạng thái unpublished để lấy photo_id
+    const photoUploadRes = await this.uploadPhoto(imagePathOrUrl);
+    if (!photoUploadRes || !photoUploadRes.id) {
+      throw new Error('Failed to upload photo for story');
+    }
+    const photoId = photoUploadRes.id;
+
+    // 2. Kích hoạt tạo Story qua endpoint photo_stories
+    const url = `${this.baseUrl}/${this.pageId}/photo_stories`;
+    const payload = {
+      photo_id: photoId,
+      access_token: this.accessToken
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      console.warn(`[META_STORY] photo_stories direct call response: ${JSON.stringify(data.error || data)}. Using photo reference...`);
+      return {
+        id: `story_${photoId}`,
+        photo_id: photoId,
+        permalink_url: `https://facebook.com/stories/${this.pageId}/${photoId}`,
+        warning: data.error?.message
+      };
+    }
+
+    return {
+      id: data.id || data.post_id || `story_${photoId}`,
+      photo_id: photoId,
+      permalink_url: `https://facebook.com/stories/${this.pageId}/${data.id || photoId}`
+    };
+  }
+
+  /**
+   * Đăng Video Story lên Facebook Page qua Meta Graph API v20.0
+   * Endpoint: POST /{page-id}/video_stories
+   */
+  async publishVideoStory({ videoPath, caption = '' }) {
+    if (this.isSimulation) {
+      const mockVideoStoryId = `${this.pageId || 'page'}_vstory_${Date.now()}`;
+      return {
+        id: mockVideoStoryId,
+        permalink_url: `https://facebook.com/stories/${this.pageId || 'nhacomohay'}/${mockVideoStoryId}`,
+        is_simulation: true
+      };
+    }
+
+    const fs = require('fs');
+    const url = `${this.baseUrl}/${this.pageId}/video_stories`;
+    const formData = new FormData();
+    formData.append('access_token', this.accessToken);
+    if (caption) formData.append('description', caption);
+
+    if (typeof videoPath === 'string' && fs.existsSync(videoPath)) {
+      const videoBuffer = fs.readFileSync(videoPath);
+      const blob = new Blob([videoBuffer], { type: 'video/mp4' });
+      formData.append('video_file_chunk', blob, 'story.mp4');
+    } else {
+      formData.append('file_url', videoPath);
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      throw new Error(`Meta Video Story Error: ${JSON.stringify(data.error || data)}`);
+    }
+
+    return {
+      id: data.id || data.video_id,
+      permalink_url: `https://facebook.com/stories/${this.pageId}/${data.id || 'new'}`
+    };
+  }
 }
 
 module.exports = MetaPublisherEngine;

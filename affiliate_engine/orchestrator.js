@@ -9,6 +9,7 @@ const fs = require('fs');
 const ShopeeAffiliateEngine = require('./shopee_engine');
 const GeminiAffiliateAIEngine = require('./ai_engine');
 const MetaPublisherEngine = require('./meta_engine');
+const StoryCompositor = require('./story_compositor');
 
 class AffiliateOrchestrator {
   constructor() {
@@ -23,6 +24,7 @@ class AffiliateOrchestrator {
     this.shopee = new ShopeeAffiliateEngine();
     this.ai = new GeminiAffiliateAIEngine();
     this.meta = new MetaPublisherEngine();
+    this.storyCompositor = new StoryCompositor();
   }
 
   async getConfig(key) {
@@ -736,14 +738,16 @@ class AffiliateOrchestrator {
   }
 
   /**
-   * STEP 3: PUBLISH QUEUED CONTENT TO FACEBOOK PAGE
+   * STEP 3: PUBLISH QUEUED CONTENT TO FACEBOOK PAGE (FEED POSTS & 9:16 STORIES)
    */
   async runPublisherQueue(forceNow = false) {
-    console.log(`[PUBLISHER] Checking pending posts in queue (forceNow=${forceNow})...`);
+    console.log(`[PUBLISHER] Checking pending items in queue (forceNow=${forceNow})...`);
     const statusFilter = forceNow ? "q.status IN ('PENDING', 'FAILED')" : "q.status = 'PENDING'";
     const timeFilter = forceNow ? '' : 'AND q.scheduled_for <= NOW()';
     const queueItems = await this.pool.query(`
-      SELECT q.id as queue_id, q.content_id, c.full_caption, c.first_comment_text, c.selected_image_urls, p.product_name
+      SELECT q.id as queue_id, q.content_id, q.target_type, q.story_media_url, q.parent_post_id,
+             c.full_caption, c.first_comment_text, c.selected_image_urls, c.content_angle,
+             p.id as product_id, p.product_name, p.price, p.original_price, p.discount_percentage, p.rating_star, p.historical_sold
       FROM affiliate_publishing_queue q
       JOIN affiliate_content_items c ON q.content_id = c.id
       JOIN affiliate_products p ON c.product_id = p.id
@@ -758,12 +762,84 @@ class AffiliateOrchestrator {
     }
 
     const item = queueItems.rows[0];
-    console.log(`[PUBLISHER] Publishing post for "${item.product_name}" to Facebook Page...`);
+    const isStory = item.target_type === 'STORY';
 
     // Lock status
     await this.pool.query('UPDATE affiliate_publishing_queue SET status = $1 WHERE id = $2', ['PROCESSING', item.queue_id]);
 
     try {
+      if (isStory) {
+        // ==========================================
+        // BRANCH A: PUBLISH 9:16 VERTICAL STORY
+        // ==========================================
+        console.log(`[PUBLISHER_STORY] Publishing 9:16 Story for "${item.product_name}" to Facebook Page...`);
+        let storyAssetPath = item.story_media_url;
+
+        // Nếu chưa có ảnh story hoặc file không tồn tại, tự động render ngay lập tức
+        if (!storyAssetPath || !fs.existsSync(storyAssetPath)) {
+          const storyDir = '/home/node/.n8n/generated_images';
+          if (!fs.existsSync(storyDir)) fs.mkdirSync(storyDir, { recursive: true });
+          storyAssetPath = `${storyDir}/story_${item.content_id}_${Date.now()}.jpg`;
+
+          let imageUrls = item.selected_image_urls;
+          if (typeof imageUrls === 'string') {
+            try { imageUrls = JSON.parse(imageUrls); } catch(e) {}
+          }
+          const sourceImg = (Array.isArray(imageUrls) && imageUrls.length > 0)
+            ? imageUrls[0]
+            : this.getCuratedImageForProduct(item.product_name);
+
+          const storyHook = await this.ai.generateStoryHook(item, item.content_angle || 'PROBLEM_SOLUTION');
+
+          await this.storyCompositor.composeStory({
+            sourceImage: sourceImg,
+            productName: item.product_name,
+            hookText: storyHook.hook_text,
+            subText: storyHook.sub_text,
+            price: item.price,
+            originalPrice: item.original_price,
+            discountPercent: item.discount_percentage,
+            rating: item.rating_star,
+            soldCount: `${(item.historical_sold / 1000).toFixed(1)}k+`,
+            ctaText: storyHook.cta_text || 'XEM BÀI VIẾT TRÊN TRANG',
+            theme: storyHook.theme || 'ORANGE',
+            outputPath: storyAssetPath
+          });
+        }
+
+        // Gọi Meta Graph API đăng Story
+        const storyRes = await this.meta.publishPhotoStory({
+          imagePathOrUrl: storyAssetPath,
+          caption: item.product_name,
+          feedPostId: item.parent_post_id
+        });
+
+        console.log(`[PUBLISHER_STORY] Story published successfully: fb_story_id = ${storyRes.id}`);
+
+        // Lưu bản ghi vào bảng affiliate_facebook_stories
+        await this.pool.query(`
+          INSERT INTO affiliate_facebook_stories (
+            content_id, story_fb_id, media_type, story_asset_path, hook_text, feed_post_id, published_at
+          ) VALUES ($1, $2, 'IMAGE', $3, $4, $5, NOW())
+          ON CONFLICT (story_fb_id) DO NOTHING
+        `, [
+          item.content_id,
+          storyRes.id,
+          storyAssetPath,
+          item.product_name,
+          item.parent_post_id
+        ]);
+
+        // Cập nhật trạng thái Queue
+        await this.pool.query('UPDATE affiliate_publishing_queue SET status = $1, updated_at = NOW() WHERE id = $2', ['SUCCESS', item.queue_id]);
+
+        return { storyId: storyRes.id, type: 'STORY' };
+      }
+
+      // ==========================================
+      // BRANCH B: PUBLISH STANDARD FEED POST
+      // ==========================================
+      console.log(`[PUBLISHER] Publishing feed post for "${item.product_name}" to Facebook Page...`);
       // 1. Upload Photos
       let imageUrls = item.selected_image_urls;
       if (typeof imageUrls === 'string') {
@@ -835,7 +911,47 @@ class AffiliateOrchestrator {
       await this.pool.query('UPDATE affiliate_publishing_queue SET status = $1, updated_at = NOW() WHERE id = $2', ['SUCCESS', item.queue_id]);
       await this.pool.query('UPDATE affiliate_content_items SET status = $1, updated_at = NOW() WHERE id = $2', ['PUBLISHED', item.content_id]);
 
-      return { postId: postRes.id, commentId: commentRes.id };
+      // 6. AUTO-BRIDGE: Tự động tạo và lên lịch Story Teaser 9:16 sau 20 phút để kéo traffic
+      try {
+        console.log(`[PUBLISHER] Auto-generating Story Teaser bridge for "${item.product_name}"...`);
+        const storyDir = '/home/node/.n8n/generated_images';
+        if (!fs.existsSync(storyDir)) fs.mkdirSync(storyDir, { recursive: true });
+        const storyAssetPath = `${storyDir}/story_${item.content_id}.jpg`;
+
+        const sourceImage = (Array.isArray(imageUrls) && imageUrls.length > 0)
+          ? imageUrls[0]
+          : this.getCuratedImageForProduct(item.product_name);
+
+        const storyHook = await this.ai.generateStoryHook(item, item.content_angle || 'PROBLEM_SOLUTION');
+
+        await this.storyCompositor.composeStory({
+          sourceImage,
+          productName: item.product_name,
+          hookText: storyHook.hook_text,
+          subText: storyHook.sub_text,
+          price: item.price,
+          originalPrice: item.original_price,
+          discountPercent: item.discount_percentage,
+          rating: item.rating_star,
+          soldCount: `${(item.historical_sold / 1000).toFixed(1)}k+`,
+          ctaText: storyHook.cta_text || 'XEM BÀI REVIEW TRÊN TRANG',
+          theme: storyHook.theme || 'ORANGE',
+          outputPath: storyAssetPath
+        });
+
+        // Enqueue vào queue: lên lịch sau 20 phút
+        await this.pool.query(`
+          INSERT INTO affiliate_publishing_queue (
+            content_id, scheduled_for, status, target_type, story_media_url, parent_post_id
+          ) VALUES ($1, NOW() + INTERVAL '20 minutes', 'PENDING', 'STORY', $2, $3)
+        `, [item.content_id, storyAssetPath, postRes.id]);
+
+        console.log(`[PUBLISHER] ✅ Auto-Bridge: Enqueued 9:16 Story Teaser due in 20 minutes (linked to Feed post ${postRes.id})`);
+      } catch (bridgeErr) {
+        console.warn('[PUBLISHER_BRIDGE_WARN] Failed to auto-generate story teaser:', bridgeErr.message);
+      }
+
+      return { postId: postRes.id, commentId: commentRes.id, type: 'FEED' };
     } catch (err) {
       console.error('[PUBLISHER_ERROR]', err.message);
       await this.pool.query(`
@@ -907,12 +1023,13 @@ class AffiliateOrchestrator {
   }
 
   /**
-   * STEP 5: DAILY REVENUE SUMMARY
+   * STEP 5: DAILY REVENUE & STORY SUMMARY
    */
   async getDailySummary() {
     const res = await this.pool.query(`
       SELECT 
         COUNT(DISTINCT c.id) as total_posts,
+        (SELECT COUNT(*) FROM affiliate_facebook_stories WHERE published_at >= CURRENT_DATE) as total_stories,
         COALESCE(SUM(conv.estimated_total_commission), 0) as total_est_commission,
         COUNT(DISTINCT conv.id) as total_orders
       FROM affiliate_content_items c
@@ -924,7 +1041,7 @@ class AffiliateOrchestrator {
   }
 
   /**
-   * STEP 5B: GỬI BÁO CÁO DOANH THU HÀNG NGÀY QUA SLACK
+   * STEP 5B: GỬI BÁO CÁO DOANH THU & STORY HÀNG NGÀY QUA SLACK
    */
   async sendSlackDailyReport() {
     const token = process.env.SLACK_BOT_TOKEN;
@@ -937,6 +1054,7 @@ class AffiliateOrchestrator {
 
     const summary = await this.getDailySummary();
     const totalPosts = Number(summary.total_posts || 0);
+    const totalStories = Number(summary.total_stories || 0);
     const totalOrders = Number(summary.total_orders || 0);
     const totalComm = Number(summary.total_est_commission || 0).toLocaleString('vi-VN');
     const formattedDate = new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
@@ -946,7 +1064,7 @@ class AffiliateOrchestrator {
         type: 'header',
         text: {
           type: 'plain_text',
-          text: '📊 BÁO CÁO DOANH THU SHOPEE AFFILIATE',
+          text: '📊 BÁO CÁO DOANH THU & TƯƠNG TÁC SHOPEE AFFILIATE',
           emoji: true
         }
       },
@@ -968,27 +1086,33 @@ class AffiliateOrchestrator {
         fields: [
           {
             type: 'mrkdwn',
-            text: `*📝 Bài đăng hôm nay:*\n*${totalPosts}* bài`
+            text: `*📝 Bài đăng Feed:*\n*${totalPosts}* bài`
           },
           {
             type: 'mrkdwn',
-            text: `*📦 Đơn hàng phát sinh:*\n*${totalOrders}* đơn`
+            text: `*📱 Story 9:16 đã lên sóng:*\n*${totalStories}* story (Auto-Bridge)`
           }
         ]
       },
       {
         type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*💰 Hoa hồng ước tính:* \`${totalComm} đ\``
-        }
+        fields: [
+          {
+            type: 'mrkdwn',
+            text: `*📦 Đơn hàng phát sinh:*\n*${totalOrders}* đơn`
+          },
+          {
+            type: 'mrkdwn',
+            text: `*💰 Hoa hồng ước tính:*\n\`${totalComm} đ\``
+          }
+        ]
       },
       {
         type: 'context',
         elements: [
           {
             type: 'mrkdwn',
-            text: '🤖 *Tối ưu hóa AI:* Hệ thống đang vận hành tự động theo thuật toán Bandit & Gemini AI.'
+            text: '🤖 *Tối ưu hóa đa kênh:* Hệ thống tự động kích hoạt Story Teaser 9:16 sau mỗi bài Feed để giải quyết triệt để vấn đề 0 view!'
           }
         ]
       }
@@ -1052,6 +1176,9 @@ if (require.main === module) {
         await orchestrator.runContentFactoryAndQA();
       } else if (arg === '--publish' || arg === '--publish-now') {
         await orchestrator.runPublisherQueue(arg === '--publish-now');
+      } else if (arg === '--publish-story' || arg === '--story-now') {
+        // Explicitly trigger story publisher
+        await orchestrator.runPublisherQueue(true);
       } else if (arg === '--reconcile') {
         await orchestrator.runConversionReconciler();
       } else if (arg === '--slack-report') {
@@ -1067,7 +1194,7 @@ if (require.main === module) {
         console.log('=== CYCLE COMPLETE ===\nDaily Summary:', summary);
         await orchestrator.sendSlackDailyReport();
       } else {
-        console.log('Usage: node orchestrator.js [--hunt | --import-links "..." | --import-file path | --manual-cycle "..." | --generate | --publish | --reconcile | --slack-report | --all]');
+        console.log('Usage: node orchestrator.js [--hunt | --import-links "..." | --import-file path | --manual-cycle "..." | --generate | --publish | --publish-story | --reconcile | --slack-report | --all]');
       }
       process.exit(0);
     } catch (e) {
