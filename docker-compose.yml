@@ -44,22 +44,22 @@ services:
       - "traefik.http.routers.n8n.middlewares=secure-headers@file"
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
 
-  fb-scraper:
-    build:
-      context: ./fb-scraper
-      dockerfile: Dockerfile
-    container_name: n8n-prod-fb-scraper
-    restart: unless-stopped
-    env_file: .env
-    volumes:
-      - ./fb_scraper_data:/app/browser_data
-    networks:
-      - n8n_internal
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
+#   fb-scraper:
+#     build:
+#       context: ./fb-scraper
+#       dockerfile: Dockerfile
+#     container_name: n8n-prod-fb-scraper
+#     restart: unless-stopped
+#     env_file: .env
+#     volumes:
+#       - ./fb_scraper_data:/app/browser_data
+#     networks:
+#       - n8n_internal
+#     healthcheck:
+#       test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/health || exit 1"]
+#       interval: 15s
+#       timeout: 5s
+#       retries: 3
 
 
 networks:

@@ -1,5 +1,7 @@
 import fs from 'fs';
+import path from 'path';
 import { config } from '../config';
+import { pool } from '../db/pool';
 
 export interface YouTubeUploadMetadata {
   title: string;
@@ -7,6 +9,7 @@ export interface YouTubeUploadMetadata {
   category: string;
   tags?: string[];
   privacyStatus?: 'private' | 'unlisted' | 'public';
+  channelName?: string;
 }
 
 export interface YouTubeUploadResult {
@@ -16,15 +19,80 @@ export interface YouTubeUploadResult {
   privacyStatus: string;
 }
 
+export interface ChannelCredentialsInput {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+}
+
 export class YouTubePublisher {
   private clientId: string;
   private clientSecret: string;
   private refreshToken: string;
+  private channelId?: string;
 
-  constructor() {
-    this.clientId = config.youtube.clientId;
-    this.clientSecret = config.youtube.clientSecret;
-    this.refreshToken = config.youtube.refreshToken;
+  constructor(creds?: Partial<ChannelCredentialsInput>, channelId?: string) {
+    this.clientId = creds?.clientId || config.youtube.clientId;
+    this.clientSecret = creds?.clientSecret || config.youtube.clientSecret;
+    this.refreshToken = creds?.refreshToken || config.youtube.refreshToken;
+    this.channelId = channelId;
+  }
+
+  /**
+   * Factory method to load dynamic credentials for a specific channel from DB or ENV
+   */
+  public static async forChannel(channelId: string): Promise<YouTubePublisher> {
+    try {
+      // 1. Query database credentials for this channel
+      const res = await pool.query(
+        'SELECT client_id, client_secret, refresh_token FROM channel_credentials WHERE channel_id = $1',
+        [channelId]
+      );
+
+      if (res.rows.length > 0 && res.rows[0].refresh_token) {
+        const row = res.rows[0];
+        console.log(`[YouTubePublisher] Loaded credentials for channel "${channelId}" from database.`);
+        return new YouTubePublisher(
+          {
+            clientId: row.client_id,
+            clientSecret: row.client_secret,
+            refreshToken: row.refresh_token,
+          },
+          channelId
+        );
+      }
+
+      // 2. Check channel-specific environment variables e.g. YOUTUBE_CH_TECH_CLIENT_ID
+      const sanitizedKey = channelId.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+      const envClientId = process.env[`YOUTUBE_${sanitizedKey}_CLIENT_ID`];
+      const envClientSecret = process.env[`YOUTUBE_${sanitizedKey}_CLIENT_SECRET`];
+      const envRefreshToken = process.env[`YOUTUBE_${sanitizedKey}_REFRESH_TOKEN`];
+
+      if (envClientId && envClientSecret && envRefreshToken) {
+        console.log(`[YouTubePublisher] Loaded credentials for channel "${channelId}" from ENV.`);
+        return new YouTubePublisher(
+          {
+            clientId: envClientId,
+            clientSecret: envClientSecret,
+            refreshToken: envRefreshToken,
+          },
+          channelId
+        );
+      }
+    } catch (err: any) {
+      console.warn(`[YouTubePublisher] Could not query channel credentials for ${channelId}: ${err.message}`);
+    }
+
+    // 3. Fallback to default legacy config
+    console.log(`[YouTubePublisher] Using default/legacy YouTube credentials for channel "${channelId || 'default'}".`);
+    return new YouTubePublisher({}, channelId);
+  }
+
+  /**
+   * Factory method for ad-hoc credentials passed directly in API payload
+   */
+  public static forCredentials(creds: ChannelCredentialsInput, channelId?: string): YouTubePublisher {
+    return new YouTubePublisher(creds, channelId);
   }
 
   isConfigured(): boolean {
@@ -53,22 +121,47 @@ export class YouTubePublisher {
       throw new Error(`[YouTubePublisher] Failed to refresh access token: ${JSON.stringify(data)}`);
     }
 
+    // Cache updated token in DB if channelId is known
+    if (this.channelId) {
+      pool.query(
+        'UPDATE channel_credentials SET access_token = $1, access_token_expires_at = NOW() + INTERVAL \'3500 seconds\', updated_at = NOW() WHERE channel_id = $2',
+        [data.access_token, this.channelId]
+      ).catch(() => {});
+    }
+
     return data.access_token;
   }
 
-  async uploadShort(videoPath: string, meta: YouTubeUploadMetadata): Promise<YouTubeUploadResult> {
+  async uploadShort(videoSource: string, meta: YouTubeUploadMetadata): Promise<YouTubeUploadResult> {
     if (!this.isConfigured()) {
       throw new Error('[YouTubePublisher] YouTube credentials (client_id, client_secret, refresh_token) not configured.');
     }
 
-    if (!fs.existsSync(videoPath)) {
-      throw new Error(`[YouTubePublisher] Video file does not exist: ${videoPath}`);
+    let localVideoPath = videoSource;
+    let isTempDownload = false;
+
+    // If videoSource is a remote URL (e.g. Cloudinary CDN), download to a temporary buffer/file first
+    if (videoSource.startsWith('http://') || videoSource.startsWith('https://')) {
+      console.log(`[YouTubePublisher] Downloading remote video from ${videoSource} for YouTube upload...`);
+      const tempPath = path.join(config.storage.renders, `temp_remote_${Date.now()}.mp4`);
+      const response = await fetch(videoSource);
+      if (!response.ok) {
+        throw new Error(`[YouTubePublisher] Failed to fetch remote video from ${videoSource}: ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      fs.writeFileSync(tempPath, Buffer.from(arrayBuffer));
+      localVideoPath = tempPath;
+      isTempDownload = true;
     }
 
-    const stat = fs.statSync(videoPath);
+    if (!fs.existsSync(localVideoPath)) {
+      throw new Error(`[YouTubePublisher] Video file does not exist: ${localVideoPath}`);
+    }
+
+    const stat = fs.statSync(localVideoPath);
     const fileSize = stat.size;
 
-    console.log(`[YouTubePublisher] Refreshing YouTube access token...`);
+    console.log(`[YouTubePublisher] Refreshing YouTube access token for channel "${this.channelId || 'default'}"...`);
     const accessToken = await this.getFreshAccessToken();
 
     // Ensure title includes #Shorts for YouTube algorithm detection
@@ -77,15 +170,16 @@ export class YouTubePublisher {
       finalTitle = `${finalTitle.slice(0, 90)} #Shorts`;
     }
 
-    const defaultTags = ['Shorts', 'history', 'papertheater', 'ancienthistory', meta.category];
+    const channelTag = meta.channelName ? meta.channelName.replace(/\s+/g, '') : 'ShortsFactory';
+    const defaultTags = ['Shorts', channelTag, meta.category];
     const finalTags = Array.from(new Set([...defaultTags, ...(meta.tags || [])]));
 
     const metadataPayload = {
       snippet: {
         title: finalTitle,
-        description: `${meta.description}\n\n#Shorts #History #PaperTheaterWorld #${meta.category}`,
+        description: `${meta.description}\n\n#Shorts #${channelTag} #${meta.category}`,
         tags: finalTags,
-        categoryId: '27', // Education
+        categoryId: '27', // Education / Entertainment
       },
       status: {
         privacyStatus: meta.privacyStatus || config.youtube.defaultPrivacy || 'unlisted',
@@ -107,16 +201,18 @@ export class YouTubePublisher {
 
     if (!initRes.ok) {
       const err = await initRes.text();
+      if (isTempDownload) fs.unlinkSync(localVideoPath);
       throw new Error(`[YouTubePublisher] Failed to initiate upload session: ${err}`);
     }
 
     const uploadUrl = initRes.headers.get('location');
     if (!uploadUrl) {
+      if (isTempDownload) fs.unlinkSync(localVideoPath);
       throw new Error('[YouTubePublisher] Did not receive resumable upload location URL from Google.');
     }
 
-    console.log(`[YouTubePublisher] Uploading ${ (fileSize / 1024 / 1024).toFixed(2) }MB video binary...`);
-    const videoStream = fs.readFileSync(videoPath);
+    console.log(`[YouTubePublisher] Uploading ${(fileSize / 1024 / 1024).toFixed(2)}MB video binary to YouTube...`);
+    const videoStream = fs.readFileSync(localVideoPath);
 
     const uploadRes = await fetch(uploadUrl, {
       method: 'PUT',
@@ -126,6 +222,13 @@ export class YouTubePublisher {
       },
       body: videoStream,
     });
+
+    // Clean up temporary download file if used
+    if (isTempDownload) {
+      try {
+        fs.unlinkSync(localVideoPath);
+      } catch {}
+    }
 
     const uploadData = await uploadRes.json();
     if (!uploadRes.ok || !uploadData.id) {
@@ -168,8 +271,6 @@ export class YouTubePublisher {
     if (!getRes.ok || !getData.items?.length) {
       throw new Error(`[YouTubePublisher] Failed to get video info: ${JSON.stringify(getData)}`);
     }
-
-    const video = getData.items[0];
 
     // Update privacy to public
     const updateRes = await fetch(

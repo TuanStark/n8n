@@ -45,4 +45,11 @@ export const config = {
     renders: path.resolve(process.env.STORAGE_DIR || '../../storage', 'renders'),
     textures: path.resolve(process.env.STORAGE_DIR || '../../storage', 'textures'),
   },
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+    apiKey: process.env.CLOUDINARY_API_KEY || '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET || '',
+    url: process.env.CLOUDINARY_URL || '',
+    autoPurgeLocal: process.env.CLOUDINARY_AUTO_PURGE !== 'false',
+  },
 };

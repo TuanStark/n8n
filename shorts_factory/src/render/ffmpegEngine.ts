@@ -58,34 +58,53 @@ export class FFmpegEngine {
   }
 
   /**
-   * Generates procedural cinematic soundscape (0:00 Sub-Bass Boom, Whoosh Impact, Tension Riser, and tactile Paper ASMR)
+   * Generates procedural cinematic soundscape (Paper ASMR, Cyberpunk Synth, Dark Ambient, or Cinematic Boom)
    */
-  async generateCinematicSoundscape(durationSec: number, outputPath: string): Promise<string> {
+  async generateCinematicSoundscape(durationSec: number, outputPath: string, preset: string = 'paper_asmr'): Promise<string> {
     const dur = Math.max(5, Math.ceil(durationSec));
 
-    // Synthesize rich multi-layered cinematic audio bed:
-    // 0. Sub-Bass Impact Boom (exponential pitch-decaying 65Hz sine wave at 0:00)
-    // 1. Whoosh Sweep (bandpassed pink noise burst at 0:00)
-    // 2. Suspense Heartbeat / Tension Riser (120 BPM pulse between 2s and 18s)
-    // 3. Pink noise bandpassed (sliding paper friction & surface texture)
-    // 4. Brown noise lowpassed (dense cardboard knock & resonance)
-    // 5. White noise highpassed (crisp laser-cut cardstock grain)
-    const cmd = `ffmpeg -y \
-      -f lavfi -i "aevalsrc='sin(2*PI*65*exp(-1.8*t)*t)*exp(-2.0*t)':s=48000:d=3" \
-      -f lavfi -i "anoisesrc=c=pink:r=48000:a=0.15" \
-      -f lavfi -i "aevalsrc='sin(2*PI*120*t)*exp(-30*mod(t,0.5))*gte(t,2)*lte(t,18)':s=48000:d=${dur}" \
-      -f lavfi -i "anoisesrc=c=pink:r=48000:a=0.07" \
-      -f lavfi -i "anoisesrc=c=brown:r=48000:a=0.05" \
-      -f lavfi -i "anoisesrc=c=white:r=48000:a=0.015" \
-      -filter_complex "[0:a]volume=1.8[boom];[1:a]bandpass=f=1200:w=800,afade=t=in:st=0:d=0.05,afade=t=out:st=0.2:d=0.8,volume=1.3[whoosh];[2:a]lowpass=f=250,volume=0.32[heartbeat];[3:a]bandpass=f=2400:w=1500,volume=0.85[paper];[4:a]lowpass=f=450,volume=0.55[thud];[5:a]highpass=f=3500,volume=0.45[grain];[boom][whoosh][heartbeat][paper][thud][grain]amix=inputs=6[cinematic_bed]" \
-      -map "[cinematic_bed]" \
-      -t ${dur} \
-      -c:a libmp3lame \
-      "${outputPath}"`;
+    let cmd: string;
+    if (preset === 'cyberpunk_synth') {
+      // Futuristic Cyberpunk: Heavy sub-bass pulse, synth sweep, digital high-tech atmosphere
+      cmd = `ffmpeg -y \
+        -f lavfi -i "aevalsrc='sin(2*PI*55*exp(-1.5*t)*t)*exp(-2.0*t)':s=48000:d=3" \
+        -f lavfi -i "aevalsrc='sin(2*PI*110*t)*0.2*exp(-0.5*mod(t,0.25))':s=48000:d=${dur}" \
+        -f lavfi -i "anoisesrc=c=pink:r=48000:a=0.08" \
+        -filter_complex "[0:a]volume=2.0[boom];[1:a]lowpass=f=800,volume=0.4[synth_pulse];[2:a]bandpass=f=2000:w=1200,volume=0.3[tech_noise];[boom][synth_pulse][tech_noise]amix=inputs=3[cinematic_bed]" \
+        -map "[cinematic_bed]" \
+        -t ${dur} \
+        -c:a libmp3lame \
+        "${outputPath}"`;
+    } else if (preset === 'dark_ambient') {
+      // Dark Stoic / Noir: Ominous low drone (45Hz), distant rumble, cinematic tension boom
+      cmd = `ffmpeg -y \
+        -f lavfi -i "aevalsrc='sin(2*PI*45*exp(-1.0*t)*t)*exp(-1.5*t)':s=48000:d=4" \
+        -f lavfi -i "aevalsrc='sin(2*PI*55*t)*0.15':s=48000:d=${dur}" \
+        -f lavfi -i "anoisesrc=c=brown:r=48000:a=0.06" \
+        -filter_complex "[0:a]volume=1.9[boom];[1:a]lowpass=f=200,volume=0.5[drone];[2:a]lowpass=f=350,volume=0.4[rumble];[boom][drone][rumble]amix=inputs=3[cinematic_bed]" \
+        -map "[cinematic_bed]" \
+        -t ${dur} \
+        -c:a libmp3lame \
+        "${outputPath}"`;
+    } else {
+      // Default: Authentic Tactile Paper ASMR soundscape (boom + whoosh + heartbeat + friction)
+      cmd = `ffmpeg -y \
+        -f lavfi -i "aevalsrc='sin(2*PI*65*exp(-1.8*t)*t)*exp(-2.0*t)':s=48000:d=3" \
+        -f lavfi -i "anoisesrc=c=pink:r=48000:a=0.15" \
+        -f lavfi -i "aevalsrc='sin(2*PI*120*t)*exp(-30*mod(t,0.5))*gte(t,2)*lte(t,18)':s=48000:d=${dur}" \
+        -f lavfi -i "anoisesrc=c=pink:r=48000:a=0.07" \
+        -f lavfi -i "anoisesrc=c=brown:r=48000:a=0.05" \
+        -f lavfi -i "anoisesrc=c=white:r=48000:a=0.015" \
+        -filter_complex "[0:a]volume=1.8[boom];[1:a]bandpass=f=1200:w=800,afade=t=in:st=0:d=0.05,afade=t=out:st=0.2:d=0.8,volume=1.3[whoosh];[2:a]lowpass=f=250,volume=0.32[heartbeat];[3:a]bandpass=f=2400:w=1500,volume=0.85[paper];[4:a]lowpass=f=450,volume=0.55[thud];[5:a]highpass=f=3500,volume=0.45[grain];[boom][whoosh][heartbeat][paper][thud][grain]amix=inputs=6[cinematic_bed]" \
+        -map "[cinematic_bed]" \
+        -t ${dur} \
+        -c:a libmp3lame \
+        "${outputPath}"`;
+    }
 
     try {
       await execAsync(cmd);
-      console.log(`[FFmpegEngine] ✅ Generated multi-layer cinematic soundscape (${dur}s): ${outputPath}`);
+      console.log(`[FFmpegEngine] ✅ Generated multi-layer cinematic soundscape [${preset}] (${dur}s): ${outputPath}`);
     } catch (err) {
       console.warn(`[FFmpegEngine] Failed to synthesize cinematic soundscape, creating silent track fallback`, err);
       const silentCmd = `ffmpeg -y -f lavfi -i "anullsrc=r=48000:cl=mono" -t ${dur} -c:a libmp3lame "${outputPath}"`;
@@ -102,7 +121,8 @@ export class FFmpegEngine {
     shortId: string,
     scenes: SceneInput[],
     audioPath: string,
-    subtitleAssPath?: string
+    subtitleAssPath?: string,
+    soundscapePreset: string = 'paper_asmr'
   ): Promise<RenderResult> {
     const rendersDir = config.storage.renders;
     if (!fs.existsSync(rendersDir)) {
@@ -115,7 +135,7 @@ export class FFmpegEngine {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    console.log(`[FFmpegEngine] 🎬 Starting Master Tactile Paper Stop-Motion Render for ${shortId} (${scenes.length} scenes)...`);
+    console.log(`[FFmpegEngine] 🎬 Starting Master Render for ${shortId} (${scenes.length} scenes, soundscape: ${soundscapePreset})...`);
 
     try {
       // 24 FPS timeline with stepped evaluation on "twos" (12fps discrete steps) for genuine stop-motion texture
@@ -125,8 +145,8 @@ export class FFmpegEngine {
       
       // Ensure multi-layer cinematic soundscape bed is ready
       const totalEstimatedSec = scenes.reduce((acc, s) => acc + s.durationSec, 0) + 2;
-      console.log(`[FFmpegEngine] 🎧 Generating multi-layer Cinematic Soundscape bed (${totalEstimatedSec}s)...`);
-      await this.generateCinematicSoundscape(Math.max(34, totalEstimatedSec), cinematicAudioPath);
+      console.log(`[FFmpegEngine] 🎧 Generating multi-layer Cinematic Soundscape bed (${totalEstimatedSec}s, preset: ${soundscapePreset})...`);
+      await this.generateCinematicSoundscape(Math.max(34, totalEstimatedSec), cinematicAudioPath, soundscapePreset);
 
       // Build FFmpeg inputs and filter complex
       const inputArgs: string[] = ['-y'];

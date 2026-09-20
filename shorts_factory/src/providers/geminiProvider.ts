@@ -70,7 +70,7 @@ export class GeminiProvider {
       };
     }
 
-    const models = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+    const models = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3-flash-preview', 'gemini-pro-latest'];
 
     for (const model of models) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
@@ -87,8 +87,9 @@ export class GeminiProvider {
             return data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
           }
 
-          if (response.status === 429) {
-            console.warn(`[Gemini API] Model ${model} reached quota limit (429). Switching to next model...`);
+          const errBody = await response.text().catch(() => '');
+          if (response.status === 429 || response.status === 404) {
+            console.warn(`[Gemini API] Model ${model} returned ${response.status}: ${errBody.slice(0, 100)}. Trying next model...`);
             break; // Try next model immediately
           }
 
@@ -378,6 +379,90 @@ Valid categories: ancient_rome, ancient_greece, ancient_egypt.`;
     const raw = await this.callGemini(prompt, system);
     const data = this.safeJsonParse<{ topics: any[] }>(raw);
     return data.topics || [];
+  }
+
+  /**
+   * Dynamic Script Synthesis for any genre (Tech, Stoicism, History, etc.)
+   */
+  async generateDynamicScript(
+    title: string,
+    genreSystemPrompt: string,
+    userPrompt?: string,
+    targetDurationSec = 34
+  ): Promise<ScriptOutput> {
+    const system = genreSystemPrompt || `You are an Elite YouTube Shorts Scriptwriter and Retention Strategist. Pacing is rapid (7-8 segments, 2.5-4s each). High hook retention.`;
+    const prompt = `Generate a master viral YouTube Shorts script for topic: "${title}".
+Tone / Strategic instructions: ${userPrompt || 'Deliver an unforgettable, high-retention 30-34s video script.'}
+Target duration: ${targetDurationSec} seconds.
+
+Output JSON schema:
+{
+  "hook_headline": "3-5 WORDS ALL-CAPS FOR SCREEN BANNER",
+  "hook_text": "string (the punchy opening sentence)",
+  "full_script": "string (complete spoken narration, 85-100 words)",
+  "estimated_duration_sec": 33.5,
+  "hook_score": 9.5,
+  "narration_segments": [
+    { "segment_index": 1, "text": "Disruptor sentence (0-3s)", "estimated_sec": 3.0, "visual_intent": "Hero visual" },
+    { "segment_index": 2, "text": "High stakes sentence", "estimated_sec": 3.5, "visual_intent": "Stakes visual" },
+    { "segment_index": 3, "text": "Intrigue sentence", "estimated_sec": 4.0, "visual_intent": "Core mystery" },
+    { "segment_index": 4, "text": "Revelation sentence", "estimated_sec": 4.5, "visual_intent": "Revelation visual" },
+    { "segment_index": 5, "text": "Action sentence", "estimated_sec": 4.5, "visual_intent": "Action detail" },
+    { "segment_index": 6, "text": "Climax sentence", "estimated_sec": 5.0, "visual_intent": "Climax payoff" },
+    { "segment_index": 7, "text": "Twist / Infinite loop closing", "estimated_sec": 5.0, "visual_intent": "Closing loop" }
+  ],
+  "facts_used": ["key point 1", "key point 2"]
+}`;
+
+    const raw = await this.callGemini(prompt, system);
+    return this.safeJsonParse<ScriptOutput>(raw);
+  }
+
+  /**
+   * Dynamic Storyboard Generator tailored to genre's visual style
+   */
+  async generateDynamicStoryboard(
+    script: ScriptOutput,
+    visualStylePrompt: string,
+    visualNegativePrompt: string
+  ): Promise<StoryboardOutput> {
+    const system = `You are an Elite Visual Storytelling Director and Cinematographer.
+Visual Style DNA: "${visualStylePrompt}"
+Avoid: "${visualNegativePrompt}"
+
+Break down this YouTube Shorts narration into 7-8 punchy visual scenes.
+Every scene must have a vivid, cinematic visual description that adheres strictly to the Visual Style DNA.`;
+
+    const prompt = `Storyboard this script (${script.narration_segments.length} segments):
+Full Script: ${script.full_script}
+Segments:
+${JSON.stringify(script.narration_segments, null, 2)}
+
+Output JSON schema:
+{
+  "total_scenes": ${script.narration_segments.length},
+  "total_duration_sec": ${script.estimated_duration_sec},
+  "scenes": [
+    {
+      "scene_index": 1,
+      "duration_sec": 4.0,
+      "narration_text": "text for this scene",
+      "visual_description": "concrete visual description matching the genre visual style",
+      "characters": ["character/subject"],
+      "location": "scene setting",
+      "camera_movement": "push_in",
+      "motion_style": "cinematic",
+      "sound_effects": ["sfx"],
+      "positive_prompt": "vivid scene description",
+      "negative_prompt": "blurry, low quality",
+      "video_prompt": "cinematic action",
+      "paper_asmr_cues": []
+    }
+  ]
+}`;
+
+    const raw = await this.callGemini(prompt, system);
+    return this.safeJsonParse<StoryboardOutput>(raw);
   }
 }
 

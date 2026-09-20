@@ -5,6 +5,8 @@ import path from 'path';
 import { config } from './config';
 import { pool } from './db/pool';
 import { PipelineRunner } from './workers/pipelineRunner';
+import { MultiChannelPipelineRunner } from './workers/multiChannelPipelineRunner';
+import { GenreService } from './services/genreService';
 import { AutoScheduler } from './scheduler/autoScheduler';
 import { YouTubePublisher } from './publish/youtubePublisher';
 
@@ -13,6 +15,8 @@ app.use(cors());
 app.use(express.json());
 
 const runner = new PipelineRunner();
+const multiRunner = new MultiChannelPipelineRunner();
+const genreService = new GenreService();
 const scheduler = new AutoScheduler(runner);
 const youtube = new YouTubePublisher();
 scheduler.start();
@@ -232,6 +236,140 @@ app.get('/api/schedule', (req, res) => {
   });
 });
 
+// ==============================================================================
+// V2 MULTI-CHANNEL, MULTI-GENRE & CLOUDINARY API
+// ==============================================================================
+
+// 7. List all configured channels
+app.get('/api/v2/channels', async (req, res) => {
+  try {
+    const channels = await genreService.listChannels();
+    res.json({ success: true, count: channels.length, data: channels });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 8. List all genre profiles
+app.get('/api/v2/genres', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM genre_profiles ORDER BY created_at ASC');
+    res.json({ success: true, count: result.rows.length, data: result.rows });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 9. Register or update a channel and its credentials
+app.post('/api/v2/channels/configure', async (req, res) => {
+  const { id, name, genreKey, description, defaultPrivacy, defaultTags, credentials } = req.body;
+  if (!id || !name || !genreKey) {
+    return res.status(400).json({ success: false, error: 'Missing required fields: id, name, genreKey' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    await client.query(
+      `INSERT INTO channels (id, name, genre_key, description, default_privacy, default_tags, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         genre_key = EXCLUDED.genre_key,
+         description = EXCLUDED.description,
+         default_privacy = EXCLUDED.default_privacy,
+         default_tags = EXCLUDED.default_tags,
+         updated_at = NOW()`,
+      [id, name, genreKey, description || null, defaultPrivacy || 'unlisted', defaultTags || []]
+    );
+
+    if (credentials?.clientId && credentials?.clientSecret && credentials?.refreshToken) {
+      await client.query(
+        `INSERT INTO channel_credentials (channel_id, client_id, client_secret, refresh_token, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (channel_id) DO UPDATE SET
+           client_id = EXCLUDED.client_id,
+           client_secret = EXCLUDED.client_secret,
+           refresh_token = EXCLUDED.refresh_token,
+           updated_at = NOW()`,
+        [id, credentials.clientId, credentials.clientSecret, credentials.refreshToken]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: `Channel ${id} configured successfully.` });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 10. Multi-Channel Video Production Trigger (Ad-hoc or Persisted Channel)
+app.post('/api/v2/pipeline/produce', async (req, res) => {
+  const payload = req.body;
+  console.log(`[API V2] Received /api/v2/pipeline/produce request:`, {
+    channelId: payload.channelId || payload.channelConfig?.id || 'channel_01_paper',
+    title: payload.content?.title,
+    genre: payload.channelConfig?.genreKey,
+  });
+
+  if (!payload.content?.title) {
+    return res.status(400).json({ success: false, error: 'Missing required field: content.title' });
+  }
+
+  try {
+    const result = await multiRunner.produceShort(payload);
+    res.json({
+      success: true,
+      message: 'Video produced and processed successfully',
+      data: result,
+    });
+  } catch (err: any) {
+    console.error('[API V2] Production error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+});
+
+// 11. Multi-Channel Batch Execution (Runs across multiple channels)
+app.post('/api/v2/pipeline/batch', async (req, res) => {
+  const { items } = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ success: false, error: 'items array is required and must not be empty' });
+  }
+
+  console.log(`[API V2] Received batch production request for ${items.length} videos...`);
+  const results: any[] = [];
+  const errors: any[] = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    try {
+      console.log(`[API V2 Batch] Processing item ${i + 1}/${items.length}: "${item.content?.title}" for channel "${item.channelId || item.channelConfig?.id}"...`);
+      const resItem = await multiRunner.produceShort(item);
+      results.push(resItem);
+    } catch (err: any) {
+      console.error(`[API V2 Batch] Error on item ${i + 1}:`, err.message);
+      errors.push({ index: i, title: item.content?.title, error: err.message });
+    }
+  }
+
+  res.json({
+    success: errors.length === 0,
+    total: items.length,
+    succeeded: results.length,
+    failed: errors.length,
+    data: results,
+    errors,
+  });
+});
+
 app.listen(config.port, () => {
   console.log(`[AI Shorts Factory] Worker Service running on port ${config.port}`);
 });
+

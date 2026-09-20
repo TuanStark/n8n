@@ -16,6 +16,8 @@ export interface SceneImageParams {
   location?: string;
   positivePrompt?: string;
   narrationText?: string;  // The actual narration for this scene — ensures image matches voiceover
+  stylePromptOverride?: string;
+  negativePromptOverride?: string;
 }
 
 /**
@@ -92,7 +94,12 @@ export class ImageProvider {
       narrationHint = ` Visual concept for moment: "${params.narrationText.slice(0, 100)}".`;
     }
 
-    // Hero Object & Metaphor FIRST so diffusion models anchor on the subject immediately
+    // If custom style override is provided (e.g. from genre profile), use it!
+    if (params.stylePromptOverride) {
+      return `masterpiece 8k high-end cinematography of ${sceneContent}. ${params.stylePromptOverride}.${narrationHint} Dramatic lighting, 9:16 vertical composition, sharp focus, highly detailed, photorealistic render, no text, no watermark, no logos.`;
+    }
+
+    // Default: Hero Object & Metaphor FIRST so diffusion models anchor on the subject immediately
     return `still life layered papercraft art of ${sceneContent}. ${STYLE_ANCHOR}, ${palette} color palette.${narrationHint} Every object must appear physically handcrafted from individually cut paper pieces with visible cardstock thickness and shadow separation. Masterpiece, 8K, no text, no watermark, no pedestal.`;
   }
 
@@ -138,8 +145,8 @@ export class ImageProvider {
     }
 
     // STRICT ANTI-DUPLICATION VERIFICATION:
-    // If generated image hash matches ANY previous scene in this video, re-roll immediately with a new seed
-    const hash = this.calculateFileHash(finalPath);
+    // If generated image hash matches ANY previous scene in this video, re-roll immediately
+    let hash = this.calculateFileHash(finalPath);
     if (hash && this.sessionHashes.has(hash)) {
       console.warn(`[ImageProvider] 🚨 DUPLICATE DETECTED for Scene ${params.sceneIndex} (Hash ${hash.slice(0, 8)}). Re-rolling unique image...`);
       try { fs.unlinkSync(finalPath); } catch {}
@@ -150,6 +157,9 @@ export class ImageProvider {
         this.sessionHashes.add(rerollHash);
         return rerollPath;
       }
+      // If AI reroll unavailable, generate guaranteed unique procedural visual
+      finalPath = await this.generateProceduralPapercraftFallback(params, outputPath);
+      hash = this.calculateFileHash(finalPath);
     }
 
     if (hash) {
@@ -230,13 +240,13 @@ export class ImageProvider {
     outputPath: string,
     sceneIndex: number
   ): Promise<string | null> {
-    const modelsToTry = ['flux', 'flux-realism', 'turbo'];
+    const modelsToTry = ['turbo', 'flux', 'flux-realism'];
     const maxRounds = 2; // Try all models twice with backoff between rounds
 
     for (let round = 0; round < maxRounds; round++) {
       if (round > 0) {
-        console.log(`[ImageProvider] ⏳ Waiting 12s before retry round ${round + 1}...`);
-        await new Promise((r) => setTimeout(r, 12000));
+        console.log(`[ImageProvider] ⏳ Waiting 8s before retry round ${round + 1}...`);
+        await new Promise((r) => setTimeout(r, 8000));
       }
 
       for (const model of modelsToTry) {
@@ -249,7 +259,7 @@ export class ImageProvider {
           const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1792&model=${model}&nologo=true&seed=${seed}&negative=${encodedNegative}`;
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
           const response = await fetch(url, {
             signal: controller.signal,
@@ -303,13 +313,18 @@ export class ImageProvider {
     params: SceneImageParams,
     outputPath: string
   ): Promise<string> {
-    const cmd = `ffmpeg -y -f lavfi -i color=c=0xD5C4A1:s=1080x1920:d=1 \
-      -vf "drawbox=x=60:y=100:w=960:h=1720:color=0x3C3836@0.7:t=fill,drawbox=x=90:y=130:w=900:h=1660:color=0xFBF1C7@0.9:t=fill,drawbox=x=120:y=160:w=840:h=1600:color=0xEBDBB2@0.95:t=fill,noise=c1s=8:c0f=u" \
+    const r = ((params.sceneIndex * 53 + 40) % 200).toString(16).padStart(2, '0');
+    const g = ((params.sceneIndex * 97 + 50) % 200).toString(16).padStart(2, '0');
+    const b = ((params.sceneIndex * 139 + 60) % 200).toString(16).padStart(2, '0');
+    const hexColor = `${r}${g}${b}`;
+
+    const cmd = `ffmpeg -y -f lavfi -i color=c=0x${hexColor}:s=1080x1920:d=1 \
+      -vf "drawbox=x=${50 + (params.sceneIndex * 8)}:y=100:w=980:h=1720:color=0x181825@0.8:t=fill,drawbox=x=${80 + (params.sceneIndex * 8)}:y=140:w=920:h=1640:color=0x${hexColor}@0.6:t=fill,noise=c1s=12:c0f=u" \
       -frames:v 1 "${outputPath}"`;
 
     try {
       await execAsync(cmd);
-      console.log(`[ImageProvider] Generated procedural papercraft backdrop at ${outputPath}`);
+      console.log(`[ImageProvider] Generated unique procedural visual backdrop for Scene ${params.sceneIndex} at ${outputPath}`);
     } catch (err) {
       const dummyJpeg = Buffer.from(
         '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=',

@@ -1,0 +1,118 @@
+{
+  "name": "[SHORTS-FACTORY] WF02_Multi_Channel_Shorts_Matrix",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "2a2b3c4d-0001-4000-8000-000000000001",
+      "name": "Manual / Webhook Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      },
+      "id": "2a2b3c4d-0002-4000-8000-000000000002",
+      "name": "Daily Scheduled Matrix Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ==============================================================================\n// MULTI-CHANNEL PRODUCTION MATRIX CONFIGURATION\n// Chứa danh sách N kênh, thể loại (genre), prompt ý tưởng và credentials YouTube\n// ==============================================================================\n\nreturn [\n  {\n    json: {\n      channelId: 'channel_01_paper',\n      channelName: 'Paper Theater World (History)',\n      genreKey: 'paper_history',\n      title: 'The Real Reason Julius Caesar Crossed the Rubicon',\n      prompt: 'Focus on high political tension and financial ruin if he laid down arms.',\n      category: 'ancient_history',\n      // Nếu để trống credentials, hệ thống tự động dùng keys đã lưu trong DB hoặc .env\n      youtube: {\n        clientId: '',\n        clientSecret: '',\n        refreshToken: ''\n      }\n    }\n  },\n  {\n    json: {\n      channelId: 'channel_02_tech',\n      channelName: 'Quantum Horizon (Tech & AI)',\n      genreKey: 'cyberpunk_tech',\n      title: 'Quantum Supremacy: How Qubits Will Shatter Modern Cryptography',\n      prompt: 'Explain the 30-second thrill of RSA encryption collapsing before quantum computers.',\n      category: 'technology',\n      youtube: {\n        clientId: $env.YOUTUBE_CH2_CLIENT_ID || '',\n        clientSecret: $env.YOUTUBE_CH2_CLIENT_SECRET || '',\n        refreshToken: $env.YOUTUBE_CH2_REFRESH_TOKEN || ''\n      }\n    }\n  },\n  {\n    json: {\n      channelId: 'channel_03_stoic',\n      channelName: 'Iron Mind (Dark Stoicism)',\n      genreKey: 'dark_stoic',\n      title: 'Marcus Aurelius on Betrayal: The Inner Citadel',\n      prompt: 'Uncompromising stoic truth on why you must expect malice and how to remain invincible.',\n      category: 'philosophy',\n      youtube: {\n        clientId: $env.YOUTUBE_CH3_CLIENT_ID || '',\n        clientSecret: $env.YOUTUBE_CH3_CLIENT_SECRET || '',\n        refreshToken: $env.YOUTUBE_CH3_REFRESH_TOKEN || ''\n      }\n    }\n  }\n];"
+      },
+      "id": "2a2b3c4d-0003-4000-8000-000000000003",
+      "name": "Define 3 Channels & Prompts Matrix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://shorts-factory-worker:4100/api/v2/pipeline/produce",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channelId\": \"{{ $json.channelId }}\",\n  \"channelConfig\": {\n    \"name\": \"{{ $json.channelName }}\",\n    \"genreKey\": \"{{ $json.genreKey }}\",\n    \"youtube\": {\n      \"clientId\": \"{{ $json.youtube.clientId }}\",\n      \"clientSecret\": \"{{ $json.youtube.clientSecret }}\",\n      \"refreshToken\": \"{{ $json.youtube.refreshToken }}\"\n    }\n  },\n  \"content\": {\n    \"title\": \"{{ $json.title }}\",\n    \"prompt\": \"{{ $json.prompt }}\",\n    \"category\": \"{{ $json.category }}\"\n  },\n  \"options\": {\n    \"publishYouTube\": true,\n    \"uploadCloudinary\": true,\n    \"purgeLocalAfterUpload\": true,\n    \"privacyStatus\": \"unlisted\"\n  }\n}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "2a2b3c4d-0004-4000-8000-000000000004",
+      "name": "Execute Multi-Channel Pipeline Worker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 380]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.SLACK_CHANNEL_ID || 'D0BS0RNH37G' }}",
+        "text": "=🚀 *[Multi-Channel Shorts Factory] Video Production Completed!*\n\n📺 *Channel:* {{ $json.data.channelName }} (`{{ $json.data.channelId }}`)\n🎨 *Genre:* {{ $json.data.genreKey }}\n🎬 *Title:* {{ $json.data.title }}\n⏱️ *Duration:* {{ $json.data.durationSec }}s\n\n🌐 *Cloudinary CDN:* {{ $json.data.cloudinaryUrl || 'Not configured' }}\n▶️ *YouTube Shorts:* {{ $json.data.youtubeUrl || 'Upload queued / unconfigured' }}\n🧹 *Local Disk Auto-Purged:* {{ $json.data.purgedLocalDisk ? '✅ Yes (0 MB Bloat)' : 'No' }}\n🔍 *QC Status:* {{ $json.data.qcResult.overallStatus }}",
+        "otherOptions": {}
+      },
+      "id": "2a2b3c4d-0005-4000-8000-000000000005",
+      "name": "Notify Channel Production Complete",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [960, 380]
+    }
+  ],
+  "connections": {
+    "Manual / Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Define 3 Channels & Prompts Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Scheduled Matrix Trigger": {
+      "main": [
+        [
+          {
+            "node": "Define 3 Channels & Prompts Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define 3 Channels & Prompts Matrix": {
+      "main": [
+        [
+          {
+            "node": "Execute Multi-Channel Pipeline Worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Multi-Channel Pipeline Worker": {
+      "main": [
+        [
+          {
+            "node": "Notify Channel Production Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
