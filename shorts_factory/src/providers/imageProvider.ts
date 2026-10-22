@@ -94,9 +94,12 @@ export class ImageProvider {
       narrationHint = ` Visual concept for moment: "${params.narrationText.slice(0, 100)}".`;
     }
 
-    // If custom style override is provided (e.g. from genre profile), use it!
+    // If custom style override is provided, keep prompt focused and under 200 chars for diffusion stability
     if (params.stylePromptOverride) {
-      return `masterpiece 8k high-end cinematography of ${sceneContent}. ${params.stylePromptOverride}.${narrationHint} Dramatic lighting, 9:16 vertical composition, sharp focus, highly detailed, photorealistic render, no text, no watermark, no logos.`;
+      if (sceneContent.length > 120) {
+        return sceneContent.slice(0, 200);
+      }
+      return `${sceneContent}, ${params.stylePromptOverride}`.slice(0, 200);
     }
 
     // Default: Hero Object & Metaphor FIRST so diffusion models anchor on the subject immediately
@@ -128,37 +131,25 @@ export class ImageProvider {
 
     let finalPath: string | null = null;
 
-    // 1. Try Google Gemini Image Models first
-    if (config.gemini.apiKey) {
+    // 1. Primary: High-fidelity free diffusion models (Sana, FLUX)
+    finalPath = await this.tryPollinationsGeneration(scenePrompt, outputPath, params.sceneIndex);
+
+    // 2. Secondary fallback: Gemini Image Models if configured
+    if (!finalPath && config.gemini.apiKey) {
       finalPath = await this.tryGeminiImageGeneration(scenePrompt, outputPath, params.sceneIndex);
     }
 
-    // 2. Try Pollinations AI fallback
+    // 3. Last resort: genre-aware visual fallback
     if (!finalPath) {
-      finalPath = await this.tryPollinationsGeneration(scenePrompt, outputPath, params.sceneIndex);
-    }
-
-    // 3. Last resort: procedural fallback
-    if (!finalPath) {
-      console.warn(`[ImageProvider] All AI endpoints failed. Generating procedural fallback...`);
-      finalPath = await this.generateProceduralPapercraftFallback(params, outputPath);
+      console.warn(`[ImageProvider] AI endpoints throttled. Using curated genre visual fallback...`);
+      finalPath = await this.generateGenreAwareFallback(params, outputPath);
     }
 
     // STRICT ANTI-DUPLICATION VERIFICATION:
-    // If generated image hash matches ANY previous scene in this video, re-roll immediately
     let hash = this.calculateFileHash(finalPath);
     if (hash && this.sessionHashes.has(hash)) {
-      console.warn(`[ImageProvider] 🚨 DUPLICATE DETECTED for Scene ${params.sceneIndex} (Hash ${hash.slice(0, 8)}). Re-rolling unique image...`);
-      try { fs.unlinkSync(finalPath); } catch {}
-      const rerollPrompt = `${scenePrompt} Alternate dynamic perspective composition variant ${Date.now()}`;
-      const rerollPath = await this.tryPollinationsGeneration(rerollPrompt, outputPath, params.sceneIndex);
-      if (rerollPath) {
-        const rerollHash = this.calculateFileHash(rerollPath);
-        this.sessionHashes.add(rerollHash);
-        return rerollPath;
-      }
-      // If AI reroll unavailable, generate guaranteed unique procedural visual
-      finalPath = await this.generateProceduralPapercraftFallback(params, outputPath);
+      console.warn(`[ImageProvider] Duplicate hash for Scene ${params.sceneIndex}. Selecting variant...`);
+      finalPath = await this.generateGenreAwareFallback(params, outputPath);
       hash = this.calculateFileHash(finalPath);
     }
 
@@ -188,7 +179,7 @@ export class ImageProvider {
             {
               parts: [
                 {
-                  text: `Generate a vertical 9:16 aspect ratio image of this premium handcrafted editorial paper sculpture.\nStyle: Authentic physical paper-cut sculpture with 30-100 stacked cardstock contour layers, deep shadow gaps between layers, visible paper thickness, raw paper fibers, and soft top-left museum lighting.\nComposition: Clean, minimal editorial composition featuring ONE dominant Hero Object (70% of frame), minimal background with generous negative space.\nABSOLUTELY FORBIDDEN: Do NOT draw a frame, outer border, display box, tabletop, or cartoonish drawings. The entire image must be the paper craft world itself.\n\nScene details: ${prompt}`,
+                  text: `Generate a vertical 9:16 aspect ratio cinematic image.\nComposition: 9:16 vertical smartphone composition with dramatic lighting, generous negative space, sharp focus, masterpiece.\nABSOLUTELY FORBIDDEN: Do NOT draw a frame, outer border, display box, cartoon, or modern watermarks.\n\nScene details: ${prompt}`,
                 },
               ],
             },
@@ -240,30 +231,32 @@ export class ImageProvider {
     outputPath: string,
     sceneIndex: number
   ): Promise<string | null> {
-    const modelsToTry = ['turbo', 'flux', 'flux-realism'];
-    const maxRounds = 2; // Try all models twice with backoff between rounds
+    const modelsToTry = ['', 'flux'];
+    const maxRounds = 2;
 
     for (let round = 0; round < maxRounds; round++) {
       if (round > 0) {
-        console.log(`[ImageProvider] ⏳ Waiting 8s before retry round ${round + 1}...`);
-        await new Promise((r) => setTimeout(r, 8000));
+        console.log(`[ImageProvider] ⏳ Waiting 3s before Pollinations retry round ${round + 1}...`);
+        await new Promise((r) => setTimeout(r, 3000));
       }
 
       for (const model of modelsToTry) {
         try {
-          console.log(`[ImageProvider] Trying Pollinations (model: ${model}, round ${round + 1})...`);
+          console.log(`[ImageProvider] Trying Pollinations (model: ${model || 'default/sana'}, round ${round + 1})...`);
 
           const seed = Math.floor(Math.random() * 9999999);
-          const encodedPrompt = encodeURIComponent(prompt.slice(0, 1800));
-          const encodedNegative = encodeURIComponent(NEGATIVE_PROMPT);
-          const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1792&model=${model}&nologo=true&seed=${seed}&negative=${encodedNegative}`;
+          // Keep prompt compact (< 180 chars) to avoid Cloudflare/Pollinations 414 URI Too Long or 500 error
+          const cleanPrompt = prompt.replace(/[^\w\s,.:;-]/gi, '').replace(/\s+/g, ' ').trim().slice(0, 180);
+          const encodedPrompt = encodeURIComponent(cleanPrompt);
+          const modelParam = model ? `&model=${model}` : '';
+          const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=768&height=1344${modelParam}&nologo=true&seed=${seed}`;
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+          const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
 
           const response = await fetch(url, {
             signal: controller.signal,
-            headers: { 'User-Agent': 'PaperTheaterShortsFactory/3.0' },
+            headers: { 'User-Agent': 'ShortsFactoryMultiChannel/2.0' },
           });
 
           clearTimeout(timeoutId);
@@ -273,16 +266,19 @@ export class ImageProvider {
             if (buffer.length > 5000) {
               fs.writeFileSync(outputPath, buffer);
               console.log(
-                `[ImageProvider] ✅ Scene ${sceneIndex} generated via Pollinations/${model} (${(buffer.length / 1024).toFixed(1)} KB)`
+                `[ImageProvider] ✅ Scene ${sceneIndex} generated via Pollinations/${model || 'default'} (${(buffer.length / 1024).toFixed(1)} KB)`
               );
               await this.ensureStandardResolution(outputPath);
               return outputPath;
             }
+          } else if (response.status === 429) {
+            console.warn(`[ImageProvider] Pollinations returned 429 (rate limit). Pausing 3s...`);
+            await new Promise((r) => setTimeout(r, 3000));
           } else {
-            console.warn(`[ImageProvider] Pollinations ${model} returned HTTP ${response.status}`);
+            console.warn(`[ImageProvider] Pollinations ${model || 'default'} returned HTTP ${response.status}`);
           }
         } catch (err: any) {
-          console.warn(`[ImageProvider] Pollinations ${model} failed: ${err.message}`);
+          console.warn(`[ImageProvider] Pollinations ${model || 'default'} error: ${err.message}`);
         }
       }
     }
@@ -307,30 +303,65 @@ export class ImageProvider {
   }
 
   /**
-   * Generates a realistic layered paper diorama backdrop with texture and ambient shadows if AI offline
+   * Generates a genre-aware visual using curated assets library or cinematic composition
    */
-  private async generateProceduralPapercraftFallback(
+  private async generateGenreAwareFallback(
     params: SceneImageParams,
     outputPath: string
   ): Promise<string> {
-    const r = ((params.sceneIndex * 53 + 40) % 200).toString(16).padStart(2, '0');
-    const g = ((params.sceneIndex * 97 + 50) % 200).toString(16).padStart(2, '0');
-    const b = ((params.sceneIndex * 139 + 60) % 200).toString(16).padStart(2, '0');
-    const hexColor = `${r}${g}${b}`;
+    const assetsBase = path.join(path.dirname(this.rawStorageDir), 'assets');
+    const targetDir = path.join(assetsBase, params.category || 'paper_history');
 
-    const cmd = `ffmpeg -y -f lavfi -i color=c=0x${hexColor}:s=1080x1920:d=1 \
-      -vf "drawbox=x=${50 + (params.sceneIndex * 8)}:y=100:w=980:h=1720:color=0x181825@0.8:t=fill,drawbox=x=${80 + (params.sceneIndex * 8)}:y=140:w=920:h=1640:color=0x${hexColor}@0.6:t=fill,noise=c1s=12:c0f=u" \
+    let candidateFiles: string[] = [];
+
+    // 1. Look in the requested category directory
+    if (fs.existsSync(targetDir)) {
+      candidateFiles = fs
+        .readdirSync(targetDir)
+        .filter((f) => f.endsWith('.jpg') || f.endsWith('.png'))
+        .map((f) => path.join(targetDir, f));
+    }
+
+    // 2. If no files in category, gather all images across all asset categories
+    if (candidateFiles.length === 0 && fs.existsSync(assetsBase)) {
+      const subdirs = fs.readdirSync(assetsBase);
+      for (const sub of subdirs) {
+        const subPath = path.join(assetsBase, sub);
+        if (fs.statSync(subPath).isDirectory()) {
+          const files = fs
+            .readdirSync(subPath)
+            .filter((f) => f.endsWith('.jpg') || f.endsWith('.png'))
+            .map((f) => path.join(subPath, f));
+          candidateFiles.push(...files);
+        }
+      }
+    }
+
+    // 3. Copy candidate file
+    if (candidateFiles.length > 0) {
+      const chosenFile = candidateFiles[(params.sceneIndex - 1) % candidateFiles.length];
+      try {
+        fs.copyFileSync(chosenFile, outputPath);
+        console.log(
+          `[ImageProvider] ✅ Using high-res curated artwork for Scene ${params.sceneIndex} from ${path.basename(chosenFile)}`
+        );
+        await this.ensureStandardResolution(outputPath);
+        return outputPath;
+      } catch (copyErr) {
+        console.warn(`[ImageProvider] Error copying curated asset:`, copyErr);
+      }
+    }
+
+    // 4. Absolute last resort: create a rich golden-bronze papercraft texture backdrop
+    const cmd = `ffmpeg -y -f lavfi -i color=c=0x2b1d0c:s=1080x1920:d=1 \
+      -vf "noise=c1s=15:c0f=u,vignette=PI/3" \
       -frames:v 1 "${outputPath}"`;
 
     try {
       await execAsync(cmd);
-      console.log(`[ImageProvider] Generated unique procedural visual backdrop for Scene ${params.sceneIndex} at ${outputPath}`);
+      console.log(`[ImageProvider] Generated warm parchment backdrop for Scene ${params.sceneIndex}`);
     } catch (err) {
-      const dummyJpeg = Buffer.from(
-        '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=',
-        'base64'
-      );
-      fs.writeFileSync(outputPath, dummyJpeg);
+      console.error(`[ImageProvider] Fallback creation failed:`, err);
     }
 
     return outputPath;

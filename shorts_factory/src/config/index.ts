@@ -22,6 +22,9 @@ export const config = {
     apiKey: process.env.GEMINI_API_KEY || '',
     model: 'gemini-3.5-flash',
   },
+  agy: {
+    bridgeUrl: process.env.AGY_BRIDGE_URL || 'http://host.docker.internal:4150',
+  },
   elevenlabs: {
     apiKey: process.env.ELEVENLABS_API_KEY || '',
     voiceId: process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB',

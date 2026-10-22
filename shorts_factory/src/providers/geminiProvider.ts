@@ -16,11 +16,14 @@ export interface ScriptOutput {
   full_script: string;
   estimated_duration_sec: number;
   hook_score: number;
+  character_anchor?: string;
+  setting_anchor?: string;
   narration_segments: {
     segment_index: number;
     text: string;
     estimated_sec: number;
     visual_intent: string;
+    subclip_timing?: string;
   }[];
   facts_used: string[];
 }
@@ -28,6 +31,8 @@ export interface ScriptOutput {
 export interface StoryboardOutput {
   total_scenes: number;
   total_duration_sec: number;
+  character_anchor?: string;
+  setting_anchor?: string;
   scenes: {
     scene_index: number;
     duration_sec: number;
@@ -55,54 +60,87 @@ export class GeminiProvider {
   }
 
   private async callGemini(prompt: string, systemInstruction?: string): Promise<string> {
-    const body: any = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        topP: 0.95,
-        responseMimeType: 'application/json',
-      },
-    };
+    // 1. Primary Engine: Google Antigravity CLI Bridge (Google AI Ultra)
+    if (config.agy.bridgeUrl) {
+      try {
+        const agyRes = await fetch(`${config.agy.bridgeUrl}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt,
+            systemInstruction,
+            jsonMode: true,
+            timeoutSec: 150,
+          }),
+        });
 
-    if (systemInstruction) {
-      body.systemInstruction = {
-        parts: [{ text: systemInstruction }],
-      };
+        if (agyRes.ok) {
+          const resData: any = await agyRes.json();
+          if (resData.success && resData.text) {
+            console.log(`[AgyProvider] ✅ Generated response via AGY Engine (${resData.text.length} chars)`);
+            return resData.cleaned || resData.text;
+          }
+          console.warn(`[AgyProvider] AGY Bridge returned non-success:`, resData.error);
+        } else {
+          console.warn(`[AgyProvider] AGY Bridge returned HTTP ${agyRes.status}`);
+        }
+      } catch (agyErr: any) {
+        console.warn(`[AgyProvider] AGY Bridge connection error: ${agyErr.message}`);
+      }
     }
 
-    const models = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3-flash-preview', 'gemini-pro-latest'];
+    // 2. Secondary Safety Fallback: Google AI Studio API
+    if (this.apiKey) {
+      console.warn(`[AgyProvider] Falling back to legacy Gemini API...`);
+      const body: any = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          topP: 0.95,
+          responseMimeType: 'application/json',
+        },
+      };
 
-    for (const model of models) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
+      if (systemInstruction) {
+        body.systemInstruction = {
+          parts: [{ text: systemInstruction }],
+        };
+      }
 
-          if (response.ok) {
-            const data = await response.json();
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const models = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3-flash-preview', 'gemini-pro-latest'];
+
+      for (const model of models) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              return data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+            }
+
+            const errBody = await response.text().catch(() => '');
+            if (response.status === 429 || response.status === 404) {
+              console.warn(`[Gemini API] Model ${model} returned ${response.status}: ${errBody.slice(0, 100)}. Trying next model...`);
+              break;
+            }
+
+            if (attempt < 2) {
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+          } catch (err: any) {
+            console.warn(`[Gemini API] Network error on model ${model}: ${err.message}`);
           }
-
-          const errBody = await response.text().catch(() => '');
-          if (response.status === 429 || response.status === 404) {
-            console.warn(`[Gemini API] Model ${model} returned ${response.status}: ${errBody.slice(0, 100)}. Trying next model...`);
-            break; // Try next model immediately
-          }
-
-          if (attempt < 2) {
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-          }
-        } catch (err: any) {
-          console.warn(`[Gemini API] Network error on model ${model}: ${err.message}`);
         }
       }
     }
 
-    throw new Error(`[Gemini API] All models (gemini-3-flash, gemini-2.5-flash, gemini-2.5-flash-lite) failed or exhausted quota.`);
+    throw new Error(`[AgyProvider] Both AGY Bridge and fallback Gemini API failed to generate response.`);
   }
 
   private safeJsonParse<T>(raw: string): T {
@@ -382,7 +420,7 @@ Valid categories: ancient_rome, ancient_greece, ancient_egypt.`;
   }
 
   /**
-   * Dynamic Script Synthesis for any genre (Tech, Stoicism, History, etc.)
+   * FlowKit-Inspired Dynamic Script Synthesis with Retention Story Arc & Infinite Loop Outro
    */
   async generateDynamicScript(
     title: string,
@@ -390,28 +428,44 @@ Valid categories: ancient_rome, ancient_greece, ancient_egypt.`;
     userPrompt?: string,
     targetDurationSec = 34
   ): Promise<ScriptOutput> {
-    const system = genreSystemPrompt || `You are an Elite YouTube Shorts Scriptwriter and Retention Strategist. Pacing is rapid (7-8 segments, 2.5-4s each). High hook retention.`;
+    const system = genreSystemPrompt || `You are an Elite YouTube Shorts Scriptwriter, Visual Director, and Retention Strategist.
+Your scripts follow the proven Hook-Retain-Reward-Loop architecture:
+1. 0-3s DISRUPTOR HOOK: Extreme pattern interrupt. Never ask generic questions. Make a bold, counter-intuitive psychological statement.
+2. 3-10s ESCALATING TENSION: Establish high stakes. Why ordinary thinking fails.
+3. 10-22s REVELATION / CORE TRUTH: The profound tactical rule, secret, or breakthrough.
+4. 22-28s MASTER APPLICATION: How the emperor, warrior, or genius executed this with unflinching resolve.
+5. 28-34s INFINITE LOOP OUTRO: The final sentence must seamlessly and grammatically connect directly back into the opening hook, multiplying replay retention.`;
+
     const prompt = `Generate a master viral YouTube Shorts script for topic: "${title}".
 Tone / Strategic instructions: ${userPrompt || 'Deliver an unforgettable, high-retention 30-34s video script.'}
 Target duration: ${targetDurationSec} seconds.
+
+MANDATORY RULES:
+- Word count: 85 to 110 words total (timed precisely for ~30-34s narration).
+- Include a "character_anchor" (detailed physical description of the primary protagonist/historical figure to maintain visual identity across all scenes).
+- Include a "setting_anchor" (detailed physical description of the primary environment/world).
+- SEGMENT 1 (0-3s) must be an irresistible Disruptor Hook.
+- THE FINAL SEGMENT must be an INFINITE LOOP CLOSING (its final words must lead naturally and grammatically back into Segment 1).
 
 Output JSON schema:
 {
   "hook_headline": "3-5 WORDS ALL-CAPS FOR SCREEN BANNER",
   "hook_text": "string (the punchy opening sentence)",
-  "full_script": "string (complete spoken narration, 85-100 words)",
+  "full_script": "string (complete spoken narration, 85-110 words)",
   "estimated_duration_sec": 33.5,
-  "hook_score": 9.5,
+  "hook_score": 9.6,
+  "character_anchor": "Highly detailed physical description of main subject (face, beard, age, eyes, armor/attire, color accents)",
+  "setting_anchor": "Highly detailed environment description (materials, architecture, atmospheric lighting, mood)",
   "narration_segments": [
-    { "segment_index": 1, "text": "Disruptor sentence (0-3s)", "estimated_sec": 3.0, "visual_intent": "Hero visual" },
-    { "segment_index": 2, "text": "High stakes sentence", "estimated_sec": 3.5, "visual_intent": "Stakes visual" },
-    { "segment_index": 3, "text": "Intrigue sentence", "estimated_sec": 4.0, "visual_intent": "Core mystery" },
-    { "segment_index": 4, "text": "Revelation sentence", "estimated_sec": 4.5, "visual_intent": "Revelation visual" },
-    { "segment_index": 5, "text": "Action sentence", "estimated_sec": 4.5, "visual_intent": "Action detail" },
-    { "segment_index": 6, "text": "Climax sentence", "estimated_sec": 5.0, "visual_intent": "Climax payoff" },
-    { "segment_index": 7, "text": "Twist / Infinite loop closing", "estimated_sec": 5.0, "visual_intent": "Closing loop" }
+    { "segment_index": 1, "text": "Disruptor sentence (0-3s)", "estimated_sec": 3.0, "visual_intent": "Hero hook visual", "subclip_timing": "0-3s: immediate punch" },
+    { "segment_index": 2, "text": "High stakes sentence", "estimated_sec": 3.5, "visual_intent": "Stakes visual", "subclip_timing": "3-6.5s: tension rises" },
+    { "segment_index": 3, "text": "Intrigue sentence", "estimated_sec": 4.0, "visual_intent": "Core mystery", "subclip_timing": "6.5-10.5s: deep conflict" },
+    { "segment_index": 4, "text": "Revelation sentence", "estimated_sec": 4.5, "visual_intent": "Revelation visual", "subclip_timing": "10.5-15s: the rule unveiled" },
+    { "segment_index": 5, "text": "Action sentence", "estimated_sec": 4.5, "visual_intent": "Action detail", "subclip_timing": "15-19.5s: philosophy in action" },
+    { "segment_index": 6, "text": "Climax sentence", "estimated_sec": 5.0, "visual_intent": "Climax payoff", "subclip_timing": "19.5-24.5s: the emperor stands" },
+    { "segment_index": 7, "text": "Loop bridge sentence (leading back to start)", "estimated_sec": 5.0, "visual_intent": "Infinite loop closing", "subclip_timing": "24.5-29.5s: loop closure" }
   ],
-  "facts_used": ["key point 1", "key point 2"]
+  "facts_used": ["key psychological/historical point 1", "point 2"]
 }`;
 
     const raw = await this.callGemini(prompt, system);
@@ -419,43 +473,60 @@ Output JSON schema:
   }
 
   /**
-   * Dynamic Storyboard Generator tailored to genre's visual style
+   * FlowKit-Inspired Dynamic Storyboard Generator with Entity/Character Anchoring & Cinematic Camera Grammar
    */
   async generateDynamicStoryboard(
     script: ScriptOutput,
     visualStylePrompt: string,
     visualNegativePrompt: string
   ): Promise<StoryboardOutput> {
-    const system = `You are an Elite Visual Storytelling Director and Cinematographer.
+    const system = `You are an Elite Visual Storytelling Director, Director of Photography, and AI Cinematographer.
 Visual Style DNA: "${visualStylePrompt}"
-Avoid: "${visualNegativePrompt}"
+Negative Constraint: "${visualNegativePrompt}"
 
-Break down this YouTube Shorts narration into 7-8 punchy visual scenes.
-Every scene must have a vivid, cinematic visual description that adheres strictly to the Visual Style DNA.`;
+FLOWKIT CINEMATIC RULES:
+1. CHARACTER & ENTITY CONSISTENCY:
+   - Primary Subject Anchor: ${script.character_anchor || 'A powerful central protagonist'}.
+   - Every scene featuring this subject MUST carry over their exact facial features, age, clothing, and materials so that the character looks 100% consistent across all scenes!
+2. CINEMATIC CAMERA MOVEMENTS:
+   - Use dynamic cinematic movements: "slow_push_in", "low_angle_hero_shot", "over_the_shoulder_tracking", "macro_extreme_close_up", "slow_orbit_pan", "high_angle_diminishing".
+3. LIGHTING & ATMOSPHERE:
+   - Specify atmospheric lighting: volumetric fog, deep chiaroscuro shadows, warm amber candlelight, rim lighting, 35mm film grain, 9:16 vertical composition.
+4. ZERO CLUTTER:
+   - Focus on ONE hero subject or metaphor per frame. Clean composition with generous breathing room.`;
 
     const prompt = `Storyboard this script (${script.narration_segments.length} segments):
 Full Script: ${script.full_script}
+Character Anchor: ${script.character_anchor || 'Historical protagonist'}
+Setting Anchor: ${script.setting_anchor || 'Moody historical setting'}
 Segments:
 ${JSON.stringify(script.narration_segments, null, 2)}
+
+For each segment (1 to ${script.narration_segments.length}), create a vivid, cinematic 9:16 vertical scene.
+Each positive_prompt must integrate:
+[Core action/metaphor of this moment] + [Character Anchor consistency] + [Location Anchor] + [Camera angle & movement] + [Lighting & atmosphere] + [Visual Style DNA].
+End each positive_prompt with: "Masterpiece, 8K, highly detailed, dramatic lighting, 9:16 vertical composition, sharp focus, no text, no watermark, no logos."
 
 Output JSON schema:
 {
   "total_scenes": ${script.narration_segments.length},
   "total_duration_sec": ${script.estimated_duration_sec},
+  "character_anchor": "${script.character_anchor || ''}",
+  "setting_anchor": "${script.setting_anchor || ''}",
   "scenes": [
     {
       "scene_index": 1,
       "duration_sec": 4.0,
-      "narration_text": "text for this scene",
-      "visual_description": "concrete visual description matching the genre visual style",
-      "characters": ["character/subject"],
+      "narration_text": "narration for this segment",
+      "visual_description": "concise description of the visual metaphor",
+      "characters": ["character details"],
       "location": "scene setting",
-      "camera_movement": "push_in",
-      "motion_style": "cinematic",
-      "sound_effects": ["sfx"],
-      "positive_prompt": "vivid scene description",
-      "negative_prompt": "blurry, low quality",
-      "video_prompt": "cinematic action",
+      "camera_movement": "slow_push_in",
+      "motion_style": "cinematic_dolly",
+      "sound_effects": ["cinematic_bass_drop", "ambient_wind"],
+      "positive_prompt": "vivid detailed prompt with character anchor, camera, lighting, and style DNA",
+      "negative_prompt": "${visualNegativePrompt || 'blurry, low quality, cartoon, modern items, watermark, text'}",
+      "video_prompt": "0-3s: slow cinematic push in on subject with subtle head turn and atmospheric dust floating",
       "paper_asmr_cues": []
     }
   ]
@@ -464,5 +535,58 @@ Output JSON schema:
     const raw = await this.callGemini(prompt, system);
     return this.safeJsonParse<StoryboardOutput>(raw);
   }
+
+  /**
+   * FlowKit-Inspired Multi-Genre Topic Ideator with High-Hook Psychology
+   */
+  async ideateTopicsForGenre(genreKey: string, count: number = 5): Promise<Array<{
+    title: string;
+    category: string;
+    historical_period?: string;
+    concept_summary: string;
+    potential_score: number;
+    target_audience: string;
+  }>> {
+    let genrePersona = '';
+
+    if (genreKey === 'dark_stoic') {
+      genrePersona = `You are a Lead Content Strategist for an elite Dark Stoicism & Mental Fortitude channel ("Iron Mind").
+Target audience: Driven individuals, entrepreneurs, and thinkers seeking brutal psychological resilience, emotional self-mastery, and ancient Roman/Greek tactical philosophy (Marcus Aurelius, Seneca, Epictetus).
+Topics must be controversial, direct, and expose harsh psychological truths without platitudes.`;
+    } else if (genreKey === 'cyberpunk_tech') {
+      genrePersona = `You are a Lead Tech Futurist and Content Strategist for an elite Cyberpunk & Next-Gen AI channel ("Quantum Horizon").
+Target audience: Tech innovators, software engineers, and futurists fascinated by bleeding-edge AI agents, quantum breakthroughs, neural implants, and dark tech ethics.`;
+    } else {
+      genrePersona = `You are a Lead Historical Storytelling Strategist for an elite ancient history Shorts channel ("Paper Theater World").
+Target audience: History enthusiasts who love dramatic, untold, or surprising events in Ancient Rome, Ancient Greece, and Ancient Egypt.`;
+    }
+
+    const prompt = `Generate ${count} compelling, viral YouTube Shorts topics for genre: "${genreKey}".
+Requirements:
+- Punchy, high-CTR title under 70 characters with strong curiosity gap.
+- Concept summary explaining the core psychological or dramatic hook.
+- Potential viral score (8.5 to 9.9).
+
+Output JSON:
+{
+  "topics": [
+    {
+      "title": "Short punchy title under 70 chars",
+      "category": "${genreKey}",
+      "historical_period": "Historical era or Modern era",
+      "concept_summary": "1-2 sentences summarizing the dramatic angle and psychological paradox",
+      "potential_score": 9.5,
+      "target_audience": "Audience description"
+    }
+  ]
+}`;
+
+    const raw = await this.callGemini(prompt, genrePersona);
+    const data = this.safeJsonParse<{ topics: any[] }>(raw);
+    return data.topics || [];
+  }
 }
+
+export const AgyProvider = GeminiProvider;
+export type AgyProvider = GeminiProvider;
 

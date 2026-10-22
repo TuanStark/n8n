@@ -15,6 +15,7 @@ import { config } from '../config';
 
 export interface MultiChannelProductionRequest {
   channelId?: string;
+  topicId?: string;
   channelConfig?: {
     id?: string;
     name?: string;
@@ -111,23 +112,34 @@ export class MultiChannelPipelineRunner {
       console.log(`[MultiChannelPipeline] Genre: ${genreProfile.name} [Preset: ${genreKey}]`);
       console.log(`======================================================================`);
 
-      // 2. Create Topic Record in Database
+      // 2. Resolve Topic Record in Database
       const topicCategory = req.content.category || genreKey;
-      const topicInsert = await client.query(
-        `INSERT INTO topics (
-          title, category, historical_period, concept_summary, status, channel_id, genre_id, custom_prompt_override
-        ) VALUES ($1, $2, $3, $4, 'PRODUCING', $5, $6, $7) RETURNING id`,
-        [
-          req.content.title,
-          topicCategory,
-          genreProfile.name,
-          req.content.prompt || req.content.title,
-          persistedChannel ? channelId : null,
-          genreProfile.id,
-          req.content.prompt || null,
-        ]
-      );
-      const topicId = topicInsert.rows[0].id;
+      let topicId: string;
+
+      if (req.topicId) {
+        topicId = req.topicId;
+        await client.query(
+          `UPDATE topics SET status = 'PRODUCING', updated_at = NOW() WHERE id = $1`,
+          [topicId]
+        );
+        console.log(`[MultiChannelPipeline] Using existing topic record ${topicId}`);
+      } else {
+        const topicInsert = await client.query(
+          `INSERT INTO topics (
+            title, category, historical_period, concept_summary, status, channel_id, genre_id, custom_prompt_override
+          ) VALUES ($1, $2, $3, $4, 'PRODUCING', $5, $6, $7) RETURNING id`,
+          [
+            req.content.title,
+            topicCategory,
+            genreProfile.name,
+            req.content.prompt || req.content.title,
+            persistedChannel ? channelId : null,
+            genreProfile.id,
+            req.content.prompt || null,
+          ]
+        );
+        topicId = topicInsert.rows[0].id;
+      }
 
       // 3. Synthesize Script via Dynamic Genre Scriptwriter
       console.log(`[MultiChannelPipeline] Step 1: Generating dynamic script for ${genreProfile.name}...`);

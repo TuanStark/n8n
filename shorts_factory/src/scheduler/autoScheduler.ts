@@ -1,10 +1,17 @@
 import cron from 'node-cron';
 import { pool } from '../db/pool';
 import { GeminiProvider } from '../providers/geminiProvider';
-import { PipelineRunner } from '../workers/pipelineRunner';
+import { MultiChannelPipelineRunner, ProductionResult } from '../workers/multiChannelPipelineRunner';
+
+interface ActiveChannelInfo {
+  id: string;
+  name: string;
+  genre_key: string;
+  default_privacy: string;
+}
 
 export class AutoScheduler {
-  private runner: PipelineRunner;
+  private multiRunner: MultiChannelPipelineRunner;
   private gemini: GeminiProvider;
   private cronExpression: string;
   private timezone: string;
@@ -13,9 +20,10 @@ export class AutoScheduler {
   private isRunningNow: boolean = false;
   private lastRunAt: string | null = null;
   private lastRunResult: any = null;
+  private channelTurnIndex: number = 0;
 
-  constructor(runner: PipelineRunner) {
-    this.runner = runner;
+  constructor(multiRunner: MultiChannelPipelineRunner) {
+    this.multiRunner = multiRunner;
     this.gemini = new GeminiProvider();
     // Default: 11:30 AM and 6:30 PM Eastern Time (America/New_York)
     this.cronExpression = process.env.AUTO_SCHEDULE_CRON || '30 11,18 * * *';
@@ -25,48 +33,46 @@ export class AutoScheduler {
 
   start(): void {
     if (!this.isEnabled) {
-      console.log('[AutoScheduler] Automated scheduler is disabled by config (AUTO_SCHEDULE_ENABLED=false).');
+      console.log('[MultiChannelScheduler] Automated scheduler is disabled by config (AUTO_SCHEDULE_ENABLED=false).');
       return;
     }
 
     console.log('======================================================================');
-    console.log('[AutoScheduler] 🚀 Autonomous 2x Daily Shorts Scheduler Initialized!');
-    console.log(`[AutoScheduler] Timezone: ${this.timezone}`);
-    console.log(`[AutoScheduler] Schedule Pattern: "${this.cronExpression}"`);
-    console.log(`[AutoScheduler] ⏰ Slot 1: 11:30 AM EST (US Lunchtime Peak | 22:30 VN Time)`);
-    console.log(`[AutoScheduler] ⏰ Slot 2: 06:30 PM EST (US Evening Primetime | 05:30 VN Time next day)`);
+    console.log('[MultiChannelScheduler] 🚀 Autonomous Multi-Channel Shorts Scheduler Initialized!');
+    console.log(`[MultiChannelScheduler] Timezone: ${this.timezone}`);
+    console.log(`[MultiChannelScheduler] Schedule Pattern: "${this.cronExpression}"`);
+    console.log(`[MultiChannelScheduler] ⏰ Slot 1: 11:30 AM EST (Tier-1 Midday Mobile Browsing | 22:30 VN Time)`);
+    console.log(`[MultiChannelScheduler] ⏰ Slot 2: 06:30 PM EST (Tier-1 Evening Primetime | 05:30 VN Time next day)`);
     console.log('======================================================================');
 
     this.task = cron.schedule(
       this.cronExpression,
       async () => {
         if (this.isRunningNow) {
-          console.warn('[AutoScheduler] Previous video pipeline is still running. Skipping this trigger.');
+          console.warn('[MultiChannelScheduler] Previous video pipeline is still running. Skipping this trigger.');
           return;
         }
 
-        console.log(`\n[AutoScheduler] ⏰ Scheduled trigger firing at ${new Date().toISOString()}...`);
+        console.log(`\n[MultiChannelScheduler] ⏰ Scheduled trigger firing at ${new Date().toISOString()}...`);
         this.isRunningNow = true;
         this.lastRunAt = new Date().toISOString();
 
         try {
-          // 1. Ensure topics backlog is healthy
-          await this.ensureTopicBacklog();
-
-          // 2. Execute full video pipeline
-          const result = await this.runner.runFullPipelineForTopic();
+          const result = await this.executeNextChannelPipeline();
           this.lastRunResult = {
             success: true,
+            channelId: result.channelId,
+            channelName: result.channelName,
             topicTitle: result.title,
             youtubeUrl: result.youtubeUrl,
             timestamp: new Date().toISOString(),
           };
-          console.log(`[AutoScheduler] ✅ Successfully produced and published video: ${result.title}`);
+          console.log(`[MultiChannelScheduler] ✅ Successfully produced for ${result.channelName}: "${result.title}"`);
           if (result.youtubeUrl) {
-            console.log(`[AutoScheduler] 🔗 Live Shorts URL: ${result.youtubeUrl}`);
+            console.log(`[MultiChannelScheduler] 🔗 Live Shorts URL: ${result.youtubeUrl}`);
           }
         } catch (err: any) {
-          console.error('[AutoScheduler] ❌ Scheduled pipeline execution failed:', err);
+          console.error('[MultiChannelScheduler] ❌ Scheduled pipeline execution failed:', err);
           this.lastRunResult = {
             success: false,
             error: err.message,
@@ -83,38 +89,139 @@ export class AutoScheduler {
     );
   }
 
-  private async ensureTopicBacklog(): Promise<void> {
+  /**
+   * Retrieves active channels that have YouTube credentials configured
+   */
+  async getActiveChannels(): Promise<ActiveChannelInfo[]> {
     const client = await pool.connect();
     try {
-      const res = await client.query("SELECT COUNT(*) as count FROM topics WHERE status = 'IDEA'");
+      const res = await client.query(`
+        SELECT c.id, c.name, c.genre_key, c.default_privacy
+        FROM channels c
+        JOIN channel_credentials cc ON cc.channel_id = c.id
+        WHERE c.is_active = true
+        ORDER BY c.created_at ASC
+      `);
+      return res.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Ensures the topic backlog for a specific channel and genre is replenished
+   */
+  async ensureChannelTopicBacklog(channelId: string, genreKey: string): Promise<void> {
+    const client = await pool.connect();
+    try {
+      const res = await client.query(
+        "SELECT COUNT(*) as count FROM topics WHERE channel_id = $1 AND status = 'IDEA'",
+        [channelId]
+      );
       const ideaCount = parseInt(res.rows[0].count, 10);
-      console.log(`[AutoScheduler] Current available topics in backlog: ${ideaCount}`);
+      console.log(`[MultiChannelScheduler] Channel "${channelId}" (${genreKey}) idea backlog: ${ideaCount}`);
 
       if (ideaCount < 3) {
-        console.log(`[AutoScheduler] Backlog low (< 3). Auto-ideating 5 new high-hook topics with Gemini...`);
-        const newTopics = await this.gemini.ideateHistoricalTopics(5);
+        console.log(`[MultiChannelScheduler] Backlog low for ${channelId}. Auto-ideating 4 fresh high-hook topics...`);
+        const newTopics = await this.gemini.ideateTopicsForGenre(genreKey, 4);
+
         for (const t of newTopics) {
           await client.query(
             `INSERT INTO topics (
-              title, category, historical_period, concept_summary, status, potential_score, source_origin
-            ) VALUES ($1, $2, $3, $4, 'IDEA', $5, 'auto_scheduler')
+              title, category, historical_period, concept_summary, status, potential_score, channel_id, genre_id, source_origin
+            ) VALUES ($1, $2, $3, $4, 'IDEA', $5, $6, $7, 'auto_scheduler')
             ON CONFLICT DO NOTHING`,
             [
               t.title,
               t.category,
-              t.historical_period,
+              t.historical_period || 'Classic',
               t.concept_summary,
-              t.potential_score || 9.0,
+              t.potential_score || 9.2,
+              channelId,
+              genreKey,
             ]
           );
         }
-        console.log(`[AutoScheduler] Backlog replenished with ${newTopics.length} fresh historical topics.`);
+        console.log(`[MultiChannelScheduler] Backlog replenished with ${newTopics.length} topics for ${channelId}.`);
       }
-    } catch (err) {
-      console.error('[AutoScheduler] Topic backlog replenish warning:', err);
+    } catch (err: any) {
+      console.error(`[MultiChannelScheduler] Topic backlog error for ${channelId}:`, err.message);
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Selects the next channel in round-robin and executes a complete video production & publish cycle
+   */
+  async executeNextChannelPipeline(): Promise<ProductionResult> {
+    const channels = await this.getActiveChannels();
+    if (channels.length === 0) {
+      throw new Error('No active channels with configured credentials found.');
+    }
+
+    // Pick channel by round-robin rotation
+    const channel = channels[this.channelTurnIndex % channels.length];
+    this.channelTurnIndex++;
+
+    return this.executePipelineForChannel(channel.id);
+  }
+
+  /**
+   * Executes a complete production & publish cycle for a specific channel
+   */
+  async executePipelineForChannel(channelId: string): Promise<ProductionResult> {
+    const client = await pool.connect();
+    let topicToRun: { id: string; title: string; concept_summary: string; category: string } | null = null;
+    let genreKey = 'paper_history';
+
+    try {
+      const chRes = await client.query('SELECT genre_key, name FROM channels WHERE id = $1', [channelId]);
+      if (chRes.rows.length > 0) {
+        genreKey = chRes.rows[0].genre_key;
+      }
+
+      // 1. Replenish backlog if low
+      await this.ensureChannelTopicBacklog(channelId, genreKey);
+
+      // 2. Fetch top scoring IDEA for this channel
+      const topicRes = await client.query(
+        `SELECT id, title, concept_summary, category
+         FROM topics
+         WHERE channel_id = $1 AND status = 'IDEA'
+         ORDER BY potential_score DESC, created_at ASC
+         LIMIT 1`,
+        [channelId]
+      );
+
+      if (topicRes.rows.length > 0) {
+        topicToRun = topicRes.rows[0];
+      }
+    } finally {
+      client.release();
+    }
+
+    if (!topicToRun) {
+      throw new Error(`No available IDEA topics found for channel ${channelId}`);
+    }
+
+    console.log(`[MultiChannelScheduler] Selected Topic for ${channelId}: "${topicToRun.title}"`);
+
+    // 3. Produce and Publish Short
+    return await this.multiRunner.produceShort({
+      channelId,
+      topicId: topicToRun.id,
+      content: {
+        title: topicToRun.title,
+        prompt: topicToRun.concept_summary,
+        category: topicToRun.category,
+      },
+      options: {
+        publishYouTube: true,
+        uploadCloudinary: true,
+        privacyStatus: 'public',
+      },
+    });
   }
 
   getStatus() {
@@ -129,6 +236,7 @@ export class AutoScheduler {
       isCurrentlyRunning: this.isRunningNow,
       lastRunAt: this.lastRunAt,
       lastRunResult: this.lastRunResult,
+      channelTurnIndex: this.channelTurnIndex,
     };
   }
 }

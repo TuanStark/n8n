@@ -17,7 +17,7 @@ app.use(express.json());
 const runner = new PipelineRunner();
 const multiRunner = new MultiChannelPipelineRunner();
 const genreService = new GenreService();
-const scheduler = new AutoScheduler(runner);
+const scheduler = new AutoScheduler(multiRunner);
 const youtube = new YouTubePublisher();
 scheduler.start();
 
@@ -234,6 +234,30 @@ app.get('/api/schedule', (req, res) => {
     success: true,
     schedule: scheduler.getStatus(),
   });
+});
+
+// 6b. Trigger scheduled multi-channel production on demand
+app.post('/api/v2/schedule/trigger', async (req, res) => {
+  const { channelId } = req.body;
+  console.log(`[API] Manual schedule trigger requested for channel: ${channelId || 'NEXT_IN_ROTATION'}`);
+
+  try {
+    let result;
+    if (channelId) {
+      result = await scheduler.executePipelineForChannel(channelId);
+    } else {
+      result = await scheduler.executeNextChannelPipeline();
+    }
+
+    res.json({
+      success: true,
+      message: `Production completed for ${result.channelName}`,
+      data: result,
+    });
+  } catch (err: any) {
+    console.error('[API] Manual schedule trigger error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ==============================================================================
