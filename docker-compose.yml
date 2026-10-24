@@ -39,7 +39,7 @@ services:
       retries: 5
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.n8n.rule=Host(`n8n.miniappify.vn`)"
+      - "traefik.http.routers.n8n.rule=Host(`tuanstark.id.vn`) || Host(`n8n.tuanstark.id.vn`) || Host(`tuanstark.idvn`) || Host(`n8n.miniappify.vn`)"
       - "traefik.http.routers.n8n.entrypoints=web"
       - "traefik.http.routers.n8n.middlewares=secure-headers@file"
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
