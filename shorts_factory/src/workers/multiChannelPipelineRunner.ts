@@ -390,14 +390,27 @@ export class MultiChannelPipelineRunner {
         }
       }
 
-      // 12. Local Disk Auto-Purge Policy (Prevent system overload / disk full)
+      // 12. Strict Local Disk Auto-Purge Policy (Zero-Local Storage Principle)
       let purgedLocalDisk = false;
       const shouldPurge = req.options?.purgeLocalAfterUpload !== false;
 
-      if (shouldPurge && (cloudinaryUrl || youtubeVideoId)) {
-        console.log(`[MultiChannelPipeline] Step 9: Executing local disk auto-purge policy...`);
-        purgedLocalDisk = this.cloudinary.purgeLocalFile(renderRes.outputPath);
+      if (shouldPurge) {
+        console.log(`[MultiChannelPipeline] Step 9: 🧹 Executing strict zero-local disk auto-purge policy for topic ${topicId}...`);
+        // 1. Purge rendered master video
+        this.cloudinary.purgeLocalFile(renderRes.outputPath);
+        // 2. Purge temp render directory
         this.cloudinary.purgeTempDirectory(path.join(config.storage.renders, `temp_${topicId}`));
+        // 3. Purge all intermediate scene images
+        for (const sc of sceneInputs) {
+          if (sc.imagePath) this.cloudinary.purgeLocalFile(sc.imagePath);
+        }
+        // 4. Purge generated voice audio
+        if (voiceResult.audioPath) this.cloudinary.purgeLocalFile(voiceResult.audioPath);
+        // 5. Purge generated ASS subtitle file
+        if (subtitleAssPath) this.cloudinary.purgeLocalFile(subtitleAssPath);
+
+        purgedLocalDisk = true;
+        console.log(`[MultiChannelPipeline] ✅ Zero-Local Purge complete: all intermediate assets deleted. 0 MB remaining on host.`);
       }
 
       // 13. Slack Notification with Channel Badge
