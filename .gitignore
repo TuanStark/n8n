@@ -13,6 +13,9 @@
 *credential*.json
 *credentials*.json
 postgres_cred.json
+CREDENTIALS.md
+*CREDENTIALS*
+*credentials*.md
 
 # ==============================================================================
 # DOCKER VOLUMES & PERSISTENT DATA (Dữ liệu database và n8n sinh ra khi chạy)
