@@ -69,3 +69,5 @@ Thumbs.db
 *.swp
 *.swo
 .agents/
+dist/
+package-lock.json

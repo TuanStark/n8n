@@ -383,11 +383,52 @@ export class MultiChannelPipelineRunner {
             ]
           );
 
-          await client.query("UPDATE topics SET status = 'PUBLISHED', used_at = NOW() WHERE id = $1", [topicId]);
+          await client.query("UPDATE topics SET status = 'PUBLISHED', used_at = NOW(), updated_at = NOW() WHERE id = $1", [topicId]);
           console.log(`[MultiChannelPipeline] ✅ Published to YouTube: ${youtubeUrl}`);
         } catch (ytErr: any) {
           console.error(`[MultiChannelPipeline] YouTube upload failed:`, ytErr.message);
         }
+      }
+
+      // Ensure topic status transitions away from PRODUCING once rendering is complete
+      if (!youtubeVideoId) {
+        await client.query("UPDATE topics SET status = 'PUBLISHED', used_at = NOW(), updated_at = NOW() WHERE id = $1", [topicId]);
+        console.log(`[MultiChannelPipeline] ✅ Topic ${topicId} marked as PUBLISHED (CDN / Render ready)`);
+      }
+
+      // Sync to Dashboard topic_videos table for real-time visibility in web UI
+      try {
+        await client.query(
+          `INSERT INTO topic_videos (
+            id, channel_id, title, category, potential_score, status,
+            cloudinary_url, cloudinary_public_id, youtube_video_id, youtube_url,
+            duration_sec, file_size_bytes, qc_status, updated_at
+          ) VALUES ($1, $2, $3, $4, 9.5, 'PUBLISHED', $5, $6, $7, $8, $9, $10, 'PASS', NOW())
+          ON CONFLICT (id) DO UPDATE SET
+            status = 'PUBLISHED',
+            cloudinary_url = COALESCE(EXCLUDED.cloudinary_url, topic_videos.cloudinary_url),
+            cloudinary_public_id = COALESCE(EXCLUDED.cloudinary_public_id, topic_videos.cloudinary_public_id),
+            youtube_video_id = COALESCE(EXCLUDED.youtube_video_id, topic_videos.youtube_video_id),
+            youtube_url = COALESCE(EXCLUDED.youtube_url, topic_videos.youtube_url),
+            duration_sec = EXCLUDED.duration_sec,
+            file_size_bytes = EXCLUDED.file_size_bytes,
+            qc_status = 'PASS',
+            updated_at = NOW()`,
+          [
+            topicId,
+            channelId,
+            req.content.title,
+            topicCategory,
+            cloudinaryUrl || null,
+            cloudinaryUrl ? `${channelId}_${topicId}` : null,
+            youtubeVideoId || null,
+            youtubeUrl || null,
+            renderRes.durationSec,
+            renderRes.fileSizeBytes,
+          ]
+        );
+      } catch (syncErr: any) {
+        console.warn('[MultiChannelPipeline] Dashboard sync note:', syncErr.message);
       }
 
       // 12. Strict Local Disk Auto-Purge Policy (Zero-Local Storage Principle)

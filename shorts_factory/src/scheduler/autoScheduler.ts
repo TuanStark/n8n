@@ -123,16 +123,38 @@ export class AutoScheduler {
 
       if (ideaCount < 3) {
         console.log(`[MultiChannelScheduler] Backlog low for ${channelId}. Auto-ideating 4 fresh high-hook topics...`);
-        const newTopics = await this.gemini.ideateTopicsForGenre(genreKey, 4);
+        
+        // Fetch recently created/used topic titles to avoid duplicating concepts
+        const existingRes = await client.query(
+          "SELECT title FROM topics WHERE channel_id = $1 ORDER BY created_at DESC LIMIT 60",
+          [channelId]
+        );
+        const existingTitles = existingRes.rows.map((r: any) => r.title);
 
+        const newTopics = await this.gemini.ideateTopicsForGenre(genreKey, 4, existingTitles);
+
+        let insertedCount = 0;
         for (const t of newTopics) {
+          const cleanTitle = (t.title || '').trim();
+          if (!cleanTitle) continue;
+
+          // Check if this title or very similar already exists in DB
+          const duplicateCheck = await client.query(
+            "SELECT id FROM topics WHERE channel_id = $1 AND LOWER(TRIM(title)) = LOWER($2)",
+            [channelId, cleanTitle]
+          );
+
+          if (duplicateCheck.rows.length > 0) {
+            console.log(`[MultiChannelScheduler] ⚠️ Skipping duplicate topic title: "${cleanTitle}"`);
+            continue;
+          }
+
           await client.query(
             `INSERT INTO topics (
               title, category, historical_period, concept_summary, status, potential_score, channel_id, genre_id, source_origin
-            ) VALUES ($1, $2, $3, $4, 'IDEA', $5, $6, $7, 'auto_scheduler')
-            ON CONFLICT DO NOTHING`,
+            ) VALUES ($1, $2, $3, $4, 'IDEA', $5, $6, $7, 'auto_scheduler')`,
             [
-              t.title,
+              cleanTitle,
               t.category,
               t.historical_period || 'Classic',
               t.concept_summary,
@@ -141,8 +163,9 @@ export class AutoScheduler {
               genreKey,
             ]
           );
+          insertedCount++;
         }
-        console.log(`[MultiChannelScheduler] Backlog replenished with ${newTopics.length} topics for ${channelId}.`);
+        console.log(`[MultiChannelScheduler] Backlog replenished with ${insertedCount} unique topics for ${channelId}.`);
       }
     } catch (err: any) {
       console.error(`[MultiChannelScheduler] Topic backlog error for ${channelId}:`, err.message);

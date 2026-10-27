@@ -537,9 +537,13 @@ Output JSON schema:
   }
 
   /**
-   * FlowKit-Inspired Multi-Genre Topic Ideator with High-Hook Psychology
+   * FlowKit-Inspired Multi-Genre Topic Ideator with Anti-Duplication Blacklist
    */
-  async ideateTopicsForGenre(genreKey: string, count: number = 5): Promise<Array<{
+  async ideateTopicsForGenre(
+    genreKey: string,
+    count: number = 5,
+    excludeTitles: string[] = []
+  ): Promise<Array<{
     title: string;
     category: string;
     historical_period?: string;
@@ -561,11 +565,22 @@ Target audience: Tech innovators, software engineers, and futurists fascinated b
 Target audience: History enthusiasts who love dramatic, untold, or surprising events in Ancient Rome, Ancient Greece, and Ancient Egypt.`;
     }
 
+    let blacklistSection = '';
+    if (excludeTitles && excludeTitles.length > 0) {
+      blacklistSection = `
+MANDATORY ZERO-DUPLICATION RULE:
+The following ${excludeTitles.length} topics have ALREADY been produced. You MUST NOT generate any topic that covers the same historical figure, same event, same paradox, or similar title as any of these:
+${excludeTitles.slice(0, 50).map((t) => `- "${t}"`).join('\n')}
+
+Generate completely NEW, UNEXPLORED topics featuring DIFFERENT historical figures, unusual tactical scenarios, or unexamined historical paradoxes.`;
+    }
+
     const prompt = `Generate ${count} compelling, viral YouTube Shorts topics for genre: "${genreKey}".
 Requirements:
 - Punchy, high-CTR title under 70 characters with strong curiosity gap.
 - Concept summary explaining the core psychological or dramatic hook.
 - Potential viral score (8.5 to 9.9).
+${blacklistSection}
 
 Output JSON:
 {

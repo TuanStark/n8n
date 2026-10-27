@@ -48,6 +48,7 @@ const NEGATIVE_PROMPT =
 export class ImageProvider {
   private rawStorageDir: string;
   private sessionHashes: Set<string> = new Set<string>();
+  private static lastPollinationsCallTime: number = 0;
 
   constructor() {
     this.rawStorageDir = config.storage.raw;
@@ -224,23 +225,29 @@ export class ImageProvider {
   }
 
   /**
-   * Pollinations AI fallback with focused prompts and retry-with-backoff
+   * Pollinations AI generation with rate-limit cooldown and retry-with-backoff
    */
   private async tryPollinationsGeneration(
     prompt: string,
     outputPath: string,
     sceneIndex: number
   ): Promise<string | null> {
+    const pollenKey = process.env.POLLINATIONS_API_KEY || process.env.POLLEN_API_KEY || '';
     const modelsToTry = ['', 'flux'];
     const maxRounds = 2;
 
     for (let round = 0; round < maxRounds; round++) {
-      if (round > 0) {
-        console.log(`[ImageProvider] ⏳ Waiting 3s before Pollinations retry round ${round + 1}...`);
-        await new Promise((r) => setTimeout(r, 3000));
-      }
-
       for (const model of modelsToTry) {
+        // Enforce Pollinations 45s free rate limit cooldown between calls if no API key is provided
+        if (!pollenKey && ImageProvider.lastPollinationsCallTime > 0) {
+          const elapsedSec = (Date.now() - ImageProvider.lastPollinationsCallTime) / 1000;
+          if (elapsedSec < 46) {
+            const waitSec = Math.ceil(46 - elapsedSec);
+            console.log(`[ImageProvider] ⏳ Pollinations rate limit cooldown: waiting ${waitSec}s before Scene ${sceneIndex}...`);
+            await new Promise((r) => setTimeout(r, waitSec * 1000));
+          }
+        }
+
         try {
           console.log(`[ImageProvider] Trying Pollinations (model: ${model || 'default/sana'}, round ${round + 1})...`);
 
@@ -249,14 +256,20 @@ export class ImageProvider {
           const cleanPrompt = prompt.replace(/[^\w\s,.:;-]/gi, '').replace(/\s+/g, ' ').trim().slice(0, 180);
           const encodedPrompt = encodeURIComponent(cleanPrompt);
           const modelParam = model ? `&model=${model}` : '';
-          const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=768&height=1344${modelParam}&nologo=true&seed=${seed}`;
+          const keyParam = pollenKey ? `&key=${pollenKey}` : '';
+          const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=768&height=1344${modelParam}&nologo=true&seed=${seed}${keyParam}`;
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+          const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
+          const headers: Record<string, string> = { 'User-Agent': 'ShortsFactoryMultiChannel/2.0' };
+          if (pollenKey) {
+            headers['Authorization'] = `Bearer ${pollenKey}`;
+          }
 
           const response = await fetch(url, {
             signal: controller.signal,
-            headers: { 'User-Agent': 'ShortsFactoryMultiChannel/2.0' },
+            headers,
           });
 
           clearTimeout(timeoutId);
@@ -265,15 +278,23 @@ export class ImageProvider {
             const buffer = Buffer.from(await response.arrayBuffer());
             if (buffer.length > 5000) {
               fs.writeFileSync(outputPath, buffer);
+              ImageProvider.lastPollinationsCallTime = Date.now();
               console.log(
                 `[ImageProvider] ✅ Scene ${sceneIndex} generated via Pollinations/${model || 'default'} (${(buffer.length / 1024).toFixed(1)} KB)`
               );
               await this.ensureStandardResolution(outputPath);
               return outputPath;
             }
+          } else if (response.status === 402) {
+            const errJson: any = await response.json().catch(() => ({}));
+            const errMsg = errJson?.error?.message || '';
+            const retryMatch = errMsg.match(/Retry after (\d+)s/i);
+            const waitSec = retryMatch ? parseInt(retryMatch[1], 10) : 46;
+            console.warn(`[ImageProvider] Pollinations 402 Rate Limit: ${errMsg || 'Free limit reached'}. Waiting ${waitSec}s...`);
+            await new Promise((r) => setTimeout(r, (waitSec + 1) * 1000));
           } else if (response.status === 429) {
-            console.warn(`[ImageProvider] Pollinations returned 429 (rate limit). Pausing 3s...`);
-            await new Promise((r) => setTimeout(r, 3000));
+            console.warn(`[ImageProvider] Pollinations returned 429 (rate limit). Pausing 5s...`);
+            await new Promise((r) => setTimeout(r, 5000));
           } else {
             console.warn(`[ImageProvider] Pollinations ${model || 'default'} returned HTTP ${response.status}`);
           }
@@ -303,7 +324,7 @@ export class ImageProvider {
   }
 
   /**
-   * Generates a genre-aware visual using curated assets library or cinematic composition
+   * Generates a genre-aware visual using curated assets library with dynamic variation
    */
   private async generateGenreAwareFallback(
     params: SceneImageParams,
@@ -337,18 +358,39 @@ export class ImageProvider {
       }
     }
 
-    // 3. Copy candidate file
+    // 3. Select candidate with hash-based rotation and apply dynamic FFmpeg variation
     if (candidateFiles.length > 0) {
-      const chosenFile = candidateFiles[(params.sceneIndex - 1) % candidateFiles.length];
+      const hashStr = crypto
+        .createHash('sha256')
+        .update(`${params.storyboardId}_${params.sceneIndex}_${params.visualDescription || ''}`)
+        .digest('hex');
+
+      const chosenIndex = parseInt(hashStr.slice(0, 8), 16) % candidateFiles.length;
+      const chosenFile = candidateFiles[chosenIndex];
+
+      // Subtle dynamic color & mood grading so no two scenes/videos are visually identical
+      const seedNum = parseInt(hashStr.slice(8, 14), 16);
+      const contrast = (0.95 + (seedNum % 10) * 0.01).toFixed(2);
+      const brightness = (-0.02 + ((seedNum >> 4) % 5) * 0.01).toFixed(2);
+      const saturation = (0.93 + ((seedNum >> 8) % 15) * 0.01).toFixed(2);
+
+      const cmd = `ffmpeg -y -i "${chosenFile}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=contrast=${contrast}:brightness=${brightness}:saturation=${saturation},vignette=PI/4.5" -q:v 2 "${outputPath}"`;
+
       try {
-        fs.copyFileSync(chosenFile, outputPath);
+        await execAsync(cmd);
         console.log(
-          `[ImageProvider] ✅ Using high-res curated artwork for Scene ${params.sceneIndex} from ${path.basename(chosenFile)}`
+          `[ImageProvider] ✅ Using styled curated artwork for Scene ${params.sceneIndex} from ${path.basename(chosenFile)} (Var: c=${contrast}, s=${saturation})`
         );
-        await this.ensureStandardResolution(outputPath);
         return outputPath;
-      } catch (copyErr) {
-        console.warn(`[ImageProvider] Error copying curated asset:`, copyErr);
+      } catch (cmdErr) {
+        console.warn(`[ImageProvider] Error applying dynamic style to asset, falling back to direct copy:`, cmdErr);
+        try {
+          fs.copyFileSync(chosenFile, outputPath);
+          await this.ensureStandardResolution(outputPath);
+          return outputPath;
+        } catch (copyErr) {
+          console.warn(`[ImageProvider] Error copying asset:`, copyErr);
+        }
       }
     }
 
